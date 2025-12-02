@@ -1,24 +1,90 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, MapPin, Eye } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft, Camera, MapPin, Eye, Sparkles, Loader2 } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import { toast } from "sonner";
+import SwipeWrapper from "@/components/SwipeWrapper";
+import { generateDescription } from "@/services/AIService";
 
 const ReportIssue = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
+  const location = useLocation();
+  const [formData, setFormData] = useState(location.state || {
     title: "",
     description: "",
     location: "123 Market St, San Francisco, CA",
     severity: "Medium",
     anonymous: false,
   });
+  const [selectedImage, setSelectedImage] = useState<string | null>(location.state?.image || null);
+  const [showImageOptions, setShowImageOptions] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleSubmit = () => {
-    navigate("/issue-preview", { state: formData });
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+        setShowImageOptions(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!selectedImage) {
+      toast.error("Please upload an image first");
+      return;
+    }
+
+    setIsGenerating(true);
+    toast.info("Analyzing image...");
+
+    const description = await generateDescription(selectedImage);
+
+    if (description) {
+      setFormData(prev => ({ ...prev, description }));
+      toast.success("Description generated!");
+    } else {
+      toast.error("Failed to generate description. Check API key.");
+    }
+    setIsGenerating(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.title.trim()) {
+      toast.error("Please provide a title for the issue");
+      return;
+    }
+
+    // Auto-generate description if empty and image exists
+    if (!formData.description.trim() && selectedImage) {
+      setIsGenerating(true);
+      toast.info("Auto-generating description...");
+      const description = await generateDescription(selectedImage);
+      if (description) {
+        setFormData(prev => ({ ...prev, description }));
+        // Small delay to let state update before navigating? 
+        // Actually navigate uses the current object we pass, so we need to pass the new description directly.
+        navigate("/issue-preview", { state: { ...formData, description, image: selectedImage } });
+        setIsGenerating(false);
+        return;
+      } else {
+        toast.error("Failed to auto-generate description.");
+        setIsGenerating(false);
+        // Don't return, let them proceed or fail validation if description is mandatory? 
+        // User didn't say description is mandatory, but "make title mandatory".
+        // Let's proceed with empty description if AI fails, or maybe stop?
+        // Let's proceed.
+      }
+    }
+
+    navigate("/issue-preview", { state: { ...formData, image: selectedImage } });
   };
 
   return (
-    <div className="mobile-container min-h-screen bg-background pb-24">
+    <SwipeWrapper className="mobile-container min-h-screen bg-background pb-24 relative">
       {/* Header */}
       <div className="sticky top-0 bg-background z-10 px-6 py-4 border-b border-border">
         <div className="flex items-center gap-4">
@@ -33,18 +99,34 @@ const ReportIssue = () => {
         {/* Add Photos */}
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-3">Add Photos</h2>
-          <button className="w-full h-32 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center gap-2 bg-muted/30">
-            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-              <Camera size={24} className="text-primary" />
+
+          {selectedImage ? (
+            <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-border">
+              <img src={selectedImage} alt="Issue" className="w-full h-full object-cover" />
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
+              >
+                <ArrowLeft size={20} className="rotate-45" /> {/* Using rotate for X icon effect if X not imported, or just import X */}
+              </button>
             </div>
-            <span className="text-sm text-muted-foreground">Tap to capture or upload from gallery</span>
-          </button>
+          ) : (
+            <button
+              onClick={() => setShowImageOptions(true)}
+              className="w-full h-32 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center gap-2 bg-muted/30 hover:bg-muted/50 transition-colors"
+            >
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                <Camera size={24} className="text-primary" />
+              </div>
+              <span className="text-sm text-muted-foreground">Tap to capture or upload from gallery</span>
+            </button>
+          )}
         </div>
 
         {/* Issue Details */}
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-3">Issue Details</h2>
-          
+
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">Issue Title</label>
@@ -58,7 +140,17 @@ const ReportIssue = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Description</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-foreground">Description</label>
+                <button
+                  onClick={handleGenerateDescription}
+                  disabled={isGenerating || !selectedImage}
+                  className="text-xs flex items-center gap-1 text-primary font-medium disabled:opacity-50"
+                >
+                  {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  Auto-generate
+                </button>
+              </div>
               <textarea
                 placeholder="Provide a detailed description of the issue."
                 value={formData.description}
@@ -78,7 +170,7 @@ const ReportIssue = () => {
                   className="input-field pl-12 pr-20"
                 />
                 <button
-                  onClick={() => navigate("/choose-location")}
+                  onClick={() => navigate("/choose-location", { state: formData })}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-primary font-medium text-sm"
                 >
                   Change
@@ -93,15 +185,14 @@ const ReportIssue = () => {
                   <button
                     key={level}
                     onClick={() => setFormData({ ...formData, severity: level })}
-                    className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-                      formData.severity === level
-                        ? level === "Low"
-                          ? "bg-green-500 text-primary-foreground"
-                          : level === "Medium"
+                    className={`flex-1 py-3 rounded-xl font-medium transition-all ${formData.severity === level
+                      ? level === "Low"
+                        ? "bg-green-500 text-primary-foreground"
+                        : level === "Medium"
                           ? "bg-amber-500 text-primary-foreground"
                           : "bg-red-500 text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    }`}
+                      : "bg-muted text-muted-foreground"
+                      }`}
                   >
                     {level}
                   </button>
@@ -116,29 +207,72 @@ const ReportIssue = () => {
               </div>
               <button
                 onClick={() => setFormData({ ...formData, anonymous: !formData.anonymous })}
-                className={`w-12 h-7 rounded-full transition-colors ${
-                  formData.anonymous ? "bg-primary" : "bg-muted"
-                }`}
+                className={`w-12 h-7 rounded-full transition-colors ${formData.anonymous ? "bg-primary" : "bg-muted"
+                  }`}
               >
                 <div
-                  className={`w-5 h-5 bg-primary-foreground rounded-full shadow-sm transition-transform mx-1 ${
-                    formData.anonymous ? "translate-x-5" : "translate-x-0"
-                  }`}
+                  className={`w-5 h-5 bg-primary-foreground rounded-full shadow-sm transition-transform mx-1 ${formData.anonymous ? "translate-x-5" : "translate-x-0"
+                    }`}
                 />
               </button>
             </div>
           </div>
         </div>
 
-        <button onClick={handleSubmit} className="btn-primary flex items-center justify-center gap-2">
-          <Eye size={20} />
+        <button
+          onClick={handleSubmit}
+          disabled={isGenerating}
+          className="btn-primary flex items-center justify-center gap-2 disabled:opacity-70"
+        >
+          {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Eye size={20} />}
           Preview
         </button>
         <p className="text-center text-sm text-muted-foreground -mt-2">Tap to preview before final submission</p>
       </div>
 
       <BottomNav />
-    </div>
+
+      {/* Image Selection Modal */}
+      {showImageOptions && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center sm:items-center p-4">
+          <div className="bg-background w-full max-w-sm rounded-2xl p-4 space-y-3 animate-in slide-in-from-bottom-10 fade-in">
+            <h3 className="text-lg font-semibold text-center mb-2">Select Image Source</h3>
+
+            <label className="flex items-center gap-3 p-4 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors">
+              <Camera className="text-primary" size={24} />
+              <span className="font-medium">Take Photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+            </label>
+
+            <label className="flex items-center gap-3 p-4 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors">
+              <div className="w-6 h-6 border-2 border-primary rounded-md flex items-center justify-center">
+                <div className="w-2 h-2 bg-primary rounded-full" />
+              </div>
+              <span className="font-medium">Choose from Gallery</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+            </label>
+
+            <button
+              onClick={() => setShowImageOptions(false)}
+              className="w-full py-3 text-center font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </SwipeWrapper>
   );
 };
 

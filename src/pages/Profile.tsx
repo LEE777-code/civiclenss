@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { User, FileText, Edit, Moon, Bell, HelpCircle, LogOut, ChevronRight } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { useTheme } from "@/hooks/use-theme";
+import SwipeWrapper from "@/components/SwipeWrapper";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -13,11 +14,11 @@ const Profile = () => {
   ];
 
   return (
-    <div className="mobile-container min-h-screen bg-muted pb-24">
+    <SwipeWrapper className="mobile-container min-h-screen bg-muted pb-24">
       {/* Header */}
       <div className="bg-primary px-6 pt-12 pb-8 rounded-b-3xl">
         <h1 className="text-xl font-bold text-primary-foreground mb-6">Profile</h1>
-        
+
         {/* Profile Info */}
         <div className="flex items-center gap-4">
           <div className="w-20 h-20 bg-primary-foreground/20 rounded-full flex items-center justify-center">
@@ -72,9 +73,8 @@ const Profile = () => {
             {menuItems.map((item, index) => (
               <div
                 key={item.label}
-                className={`flex items-center justify-between py-3 ${
-                  index < menuItems.length - 1 ? "border-b border-border" : ""
-                }`}
+                className={`flex items-center justify-between py-3 ${index < menuItems.length - 1 ? "border-b border-border" : ""
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon size={20} className="text-muted-foreground" />
@@ -107,7 +107,7 @@ const Profile = () => {
       </div>
 
       <BottomNav />
-    </div>
+    </SwipeWrapper>
   );
 };
 
@@ -123,9 +123,8 @@ const ThemeToggle = () => {
       className={`w-11 h-6 rounded-full p-0.5 transition-colors ${theme === "dark" ? "bg-primary" : "bg-muted"}`}
     >
       <div
-        className={`w-5 h-5 bg-primary-foreground rounded-full shadow transition-transform ${
-          theme === "dark" ? "translate-x-5" : "translate-x-0"
-        }`}
+        className={`w-5 h-5 bg-primary-foreground rounded-full shadow transition-transform ${theme === "dark" ? "translate-x-5" : "translate-x-0"
+          }`}
       />
     </button>
   );

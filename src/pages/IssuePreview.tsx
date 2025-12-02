@@ -35,7 +35,7 @@ const IssuePreview = () => {
       <div className="px-6 pt-4">
         <div className="w-full h-64 bg-gradient-to-br from-primary/15 to-primary/8 rounded-3xl overflow-hidden flex items-center justify-center shadow-md">
           <img
-            src={sampleImage}
+            src={formData.image || sampleImage}
             alt="Issue"
             className="object-cover w-full h-full"
             onError={(e) => {
@@ -58,12 +58,11 @@ const IssuePreview = () => {
               <p className="text-muted-foreground mb-3">{formData.description}</p>
               <div className="flex items-center gap-3">
                 <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-sm font-medium">Road Damage</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  formData.severity === "High" ? "severity-high" : formData.severity === "Medium" ? "severity-medium" : "severity-low"
-                }`}>{formData.severity} Severity</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${formData.severity === "High" ? "severity-high" : formData.severity === "Medium" ? "severity-medium" : "severity-low"
+                  }`}>{formData.severity} Severity</span>
               </div>
             </div>
-            <button onClick={() => navigate("/report")} className="text-primary text-sm font-medium">Edit</button>
+            <button onClick={() => navigate("/report", { state: formData })} className="text-primary text-sm font-medium">Edit</button>
           </div>
         </div>
 
@@ -116,7 +115,7 @@ const IssuePreview = () => {
         </div>
 
         <div className="text-center mt-2">
-          <button onClick={() => navigate("/report")} className="text-primary text-sm">Edit Details</button>
+          <button onClick={() => navigate("/report", { state: formData })} className="text-primary text-sm">Edit Details</button>
         </div>
       </div>
     </div>
