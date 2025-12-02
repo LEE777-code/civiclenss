@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { User, FileText, Edit, Moon, Bell, HelpCircle, LogOut, ChevronRight } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import { useTheme } from "@/hooks/use-theme";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -80,9 +81,13 @@ const Profile = () => {
                   <span className="text-foreground">{item.label}</span>
                 </div>
                 {item.type === "toggle" ? (
-                  <div className="w-11 h-6 bg-muted rounded-full p-0.5">
-                    <div className="w-5 h-5 bg-primary-foreground rounded-full shadow" />
-                  </div>
+                  item.label === "Dark Mode" ? (
+                    <ThemeToggle />
+                  ) : (
+                    <div className="w-11 h-6 bg-muted rounded-full p-0.5">
+                      <div className="w-5 h-5 bg-primary-foreground rounded-full shadow" />
+                    </div>
+                  )
                 ) : (
                   <ChevronRight size={20} className="text-muted-foreground" />
                 )}
@@ -107,3 +112,21 @@ const Profile = () => {
 };
 
 export default Profile;
+
+const ThemeToggle = () => {
+  const { theme, toggle } = useTheme();
+
+  return (
+    <button
+      onClick={toggle}
+      aria-label="Toggle dark mode"
+      className={`w-11 h-6 rounded-full p-0.5 transition-colors ${theme === "dark" ? "bg-primary" : "bg-muted"}`}
+    >
+      <div
+        className={`w-5 h-5 bg-primary-foreground rounded-full shadow transition-transform ${
+          theme === "dark" ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+};

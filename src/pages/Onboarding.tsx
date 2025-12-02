@@ -48,47 +48,46 @@ const Onboarding = () => {
   const Icon = slide.icon;
 
   return (
-    <div className="mobile-container flex flex-col min-h-screen bg-background px-6 py-12">
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className={`w-64 h-64 ${slide.color} rounded-full flex items-center justify-center mb-12 animate-scale-in`}>
+    <div className="mobile-container flex flex-col min-h-screen bg-background px-6 py-8">
+      <div className="flex-1 flex flex-col items-center justify-start pt-6">
+        <div className={`w-full max-w-md h-64 ${slide.color} rounded-2xl flex items-center justify-center mb-8 shadow-md`}>
           <Icon size={100} className={slide.iconColor} />
         </div>
-        
-        <h1 className="text-2xl font-bold text-foreground text-center mb-4 animate-fade-in">
+
+        <h1 className="text-3xl font-extrabold text-foreground text-center mb-4">
           {slide.title}
         </h1>
-        <p className="text-muted-foreground text-center text-base max-w-xs animate-fade-in">
+        <p className="text-muted-foreground text-center text-lg max-w-lg px-6">
           {slide.description}
         </p>
       </div>
 
-      <div className="flex items-center justify-center gap-2 mb-8">
+      <div className="flex items-center justify-center gap-3 mb-6">
         {slides.map((_, index) => (
           <div
             key={index}
-            className={`w-2 h-2 rounded-full transition-all ${
-              index === currentSlide ? "w-8 bg-primary" : "bg-muted-foreground/30"
+            className={`w-3 h-3 rounded-full transition-all ${
+              index === currentSlide ? "bg-primary w-3 h-3" : "bg-muted-foreground/40 w-2 h-2"
             }`}
           />
         ))}
       </div>
 
-      <div className="flex gap-3">
-        {currentSlide > 0 && (
-          <button
-            onClick={handleBack}
-            className="btn-secondary flex-1"
-          >
-            Back
-          </button>
+      <div className="flex items-center justify-between">
+        {currentSlide > 0 ? (
+          <button onClick={handleBack} className="text-foreground font-medium">Back</button>
+        ) : (
+          <div />
         )}
-        <button
-          onClick={handleNext}
-          className="btn-primary flex-1 flex items-center justify-center gap-2"
-        >
-          {currentSlide === slides.length - 1 ? "Get Started" : "Next"}
-          <ChevronRight size={20} />
-        </button>
+
+        <div className="w-36">
+          <button
+            onClick={handleNext}
+            className="btn-gradient flex items-center justify-center gap-2"
+          >
+            {currentSlide === slides.length - 1 ? "Get Started" : "Next"}
+          </button>
+        </div>
       </div>
     </div>
   );

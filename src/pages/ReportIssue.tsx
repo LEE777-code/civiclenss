@@ -132,9 +132,9 @@ const ReportIssue = () => {
 
         <button onClick={handleSubmit} className="btn-primary flex items-center justify-center gap-2">
           <Eye size={20} />
-          Submit Issue
+          Preview
         </button>
-        <p className="text-center text-sm text-muted-foreground -mt-2">Preview before submitting</p>
+        <p className="text-center text-sm text-muted-foreground -mt-2">Tap to preview before final submission</p>
       </div>
 
       <BottomNav />
