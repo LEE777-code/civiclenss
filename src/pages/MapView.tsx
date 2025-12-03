@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapPin, AlertTriangle, ChevronUp } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import SwipeWrapper from "@/components/SwipeWrapper";
 
 const markers = [
   { id: 1, lat: 30, lng: 40, type: "pothole", severity: "High" },
@@ -14,7 +15,7 @@ const MapView = () => {
   const [selectedIssue, setSelectedIssue] = useState<typeof markers[0] | null>(null);
 
   return (
-    <div className="mobile-container min-h-screen bg-background pb-20">
+    <SwipeWrapper className="mobile-container min-h-screen bg-background pb-20">
       {/* Map Area */}
       <div className="relative h-[70vh] bg-gradient-to-br from-primary/5 to-primary/10">
         {/* Simulated Map */}
@@ -29,7 +30,7 @@ const MapView = () => {
               backgroundSize: '40px 40px'
             }} />
           </div>
-          
+
           {/* Markers */}
           {markers.map((marker) => (
             <button
@@ -38,10 +39,9 @@ const MapView = () => {
               className="absolute transform -translate-x-1/2 -translate-y-1/2 animate-pulse-soft"
               style={{ left: `${marker.lng}%`, top: `${marker.lat}%` }}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
-                marker.severity === "High" ? "bg-red-500" :
-                marker.severity === "Medium" ? "bg-amber-500" : "bg-green-500"
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${marker.severity === "High" ? "bg-red-500" :
+                  marker.severity === "Medium" ? "bg-amber-500" : "bg-green-500"
+                }`}>
                 <AlertTriangle size={20} className="text-primary-foreground" />
               </div>
             </button>
@@ -79,21 +79,19 @@ const MapView = () => {
         <div className="absolute bottom-20 left-0 right-0 bg-card rounded-t-3xl shadow-2xl p-6 animate-slide-up">
           <div className="w-10 h-1 bg-muted rounded-full mx-auto mb-4" />
           <div className="flex items-start gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-              selectedIssue.severity === "High" ? "bg-red-100" :
-              selectedIssue.severity === "Medium" ? "bg-amber-100" : "bg-green-100"
-            }`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedIssue.severity === "High" ? "bg-red-100" :
+                selectedIssue.severity === "Medium" ? "bg-amber-100" : "bg-green-100"
+              }`}>
               <AlertTriangle size={24} className={
                 selectedIssue.severity === "High" ? "text-red-500" :
-                selectedIssue.severity === "Medium" ? "text-amber-500" : "text-green-500"
+                  selectedIssue.severity === "Medium" ? "text-amber-500" : "text-green-500"
               } />
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-foreground">Graffiti on Wall</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${
-                selectedIssue.severity === "High" ? "severity-high" :
-                selectedIssue.severity === "Medium" ? "severity-medium" : "severity-low"
-              }`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${selectedIssue.severity === "High" ? "severity-high" :
+                  selectedIssue.severity === "Medium" ? "severity-medium" : "severity-low"
+                }`}>
                 {selectedIssue.severity}
               </span>
             </div>
@@ -108,7 +106,7 @@ const MapView = () => {
       )}
 
       <BottomNav />
-    </div>
+    </SwipeWrapper>
   );
 };
 

@@ -1,11 +1,43 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, AlertTriangle, Lightbulb } from "lucide-react";
+import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, AlertTriangle, Lightbulb, Cloud, CloudRain, CloudSnow, CloudLightning } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import BottomNav from "@/components/BottomNav";
+import SwipeWrapper from "@/components/SwipeWrapper";
+import { getWeather, WeatherData } from "@/services/WeatherService";
 
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        // Coordinates for Anna Nagar, Chennai
+        const data = await getWeather(13.0850, 80.2101);
+        if (data) {
+          setWeather(data);
+        } else {
+          setError("Unavailable");
+        }
+      } catch (err) {
+        setError("Error");
+      }
+    };
+    fetchWeather();
+  }, []);
+
+  const getWeatherIcon = (condition: string) => {
+    switch (condition.toLowerCase()) {
+      case "clouds": return <Cloud size={20} />;
+      case "rain": return <CloudRain size={20} />;
+      case "snow": return <CloudSnow size={20} />;
+      case "thunderstorm": return <CloudLightning size={20} />;
+      default: return <Sun size={20} />;
+    }
+  };
 
   const quickActions = [
     { icon: FileText, label: "Report an Issue", desc: "Submit a new report", path: "/report", color: "bg-primary" },
@@ -34,7 +66,7 @@ const Home = () => {
   ];
 
   return (
-    <div className="mobile-container min-h-screen bg-muted pb-24">
+    <SwipeWrapper className="mobile-container min-h-screen bg-muted pb-24">
       {/* Header */}
       <div className="bg-primary px-6 pt-12 pb-8 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
@@ -45,13 +77,19 @@ const Home = () => {
           </div>
           <div className="flex items-center gap-2 text-primary-foreground/80">
             <MapPin size={16} />
-            <span className="text-sm">Anna Nagar, Chennai</span>
+            <span className="text-sm">{weather ? weather.location : "Anna Nagar, Chennai"}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2 text-primary-foreground mb-6">
-          <Sun size={20} />
-          <span className="text-sm">32°C Sunny</span>
+          {weather ? getWeatherIcon(weather.condition) : <Sun size={20} />}
+          <span className="text-sm">
+            {weather
+              ? `${weather.temp}°C ${weather.condition}`
+              : error
+                ? "Weather Unavailable (Check API Key)"
+                : "Loading..."}
+          </span>
         </div>
 
         {/* Search Bar */}
@@ -134,7 +172,7 @@ const Home = () => {
       </div>
 
       <BottomNav />
-    </div>
+    </SwipeWrapper>
   );
 };
 

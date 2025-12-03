@@ -23,9 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 
+<<<<<<< HEAD
 # Environment variables
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+=======
+# Environment Variables
+.env
+>>>>>>> c7bc9f6bf0a7ed97afe4bf735db5ba60bda01f9d

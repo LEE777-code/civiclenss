@@ -74,12 +74,12 @@ const MyReports = () => {
         {/* Filter & Sort */}
         <div className="flex gap-3 mb-4">
           <button className="flex-1 btn-secondary flex items-center justify-center gap-2 py-2.5">
-            <ArrowUpDown size={18} />
-            Sort
+            <ArrowUpDown size={18} className="text-inherit" />
+            <span className="text-inherit">Sort</span>
           </button>
           <button className="flex-1 btn-secondary flex items-center justify-center gap-2 py-2.5">
-            <Filter size={18} />
-            Filter
+            <Filter size={18} className="text-inherit" />
+            <span className="text-inherit">Filter</span>
           </button>
         </div>
 
