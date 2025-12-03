@@ -34,6 +34,7 @@ const SwipeWrapper = ({ children, className = "" }: SwipeWrapperProps) => {
         },
         trackMouse: true,
         preventScrollOnSwipe: true,
+        delta: 50, // Min swipe distance in px
     });
 
     return (

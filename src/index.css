@@ -19,7 +19,8 @@
     --primary-light: 174 60% 94%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
+    /* Made secondary darker in light mode for visibility against muted background */
+    --secondary: 210 20% 90%;
     --secondary-foreground: 220 20% 10%;
 
     --muted: 210 20% 96%;
@@ -71,7 +72,8 @@
     --primary-light: 174 30% 20%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 17%;
+    /* Made secondary lighter than background/muted for contrast */
+    --secondary: 217 33% 25%;
     --secondary-foreground: 0 0% 98%;
 
     --muted: 217 33% 17%;
@@ -83,8 +85,9 @@
     --destructive: 0 63% 31%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 217 33% 20%;
+    /* Made input darker than muted to look like a cutout */
+    --input: 220 20% 12%;
     --ring: 174 82% 36%;
   }
 }
@@ -105,7 +108,7 @@
 
 @layer components {
   .mobile-container {
-    @apply max-w-md mx-auto min-h-screen bg-background relative;
+    @apply max-w-md mx-auto min-h-[100dvh] bg-background relative;
   }
 
   .nav-item {
@@ -139,37 +142,38 @@
   /* Improve contrast for card borders in dark mode and add stronger elevation */
   .dark .card-elevated {
     border-color: hsl(var(--border) / 0.55);
-    box-shadow: 0 8px 20px rgba(2,6,23,0.35);
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
   }
 
   /* Make inputs more distinct in dark mode */
   .dark .input-field {
-    background-color: hsl(var(--input) / 0.72);
+    background-color: hsl(var(--input));
     color: hsl(var(--foreground));
-    border-color: hsl(var(--border) / 0.6);
+    border-color: hsl(var(--border));
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   .dark .input-field::placeholder {
-    color: hsl(var(--muted-foreground) / 0.9);
+    color: hsl(var(--muted-foreground));
   }
 
   /* Make secondary buttons (Sort / Filter) visible in dark mode */
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground font-semibold rounded-xl;
+    @apply bg-secondary text-secondary-foreground font-semibold rounded-xl shadow-sm border border-border/50;
   }
 
   .dark .btn-secondary {
-    background-color: hsl(var(--card) / 0.6);
-    color: hsl(var(--card-foreground));
-    border: 1px solid hsl(var(--border) / 0.6);
-    box-shadow: 0 6px 18px rgba(2,6,23,0.18);
+    background-color: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
   /* Gradient primary button used for prominent CTAs like Submit */
   .btn-gradient {
     @apply text-primary-foreground font-semibold py-3.5 px-6 rounded-full w-full;
-    background-image: linear-gradient(90deg, rgba(59,130,246,1) 0%, rgba(99,102,241,1) 100%);
-    box-shadow: 0 10px 30px rgba(59,130,246,0.18);
+    background-image: linear-gradient(90deg, rgba(59, 130, 246, 1) 0%, rgba(99, 102, 241, 1) 100%);
+    box-shadow: 0 10px 30px rgba(59, 130, 246, 0.18);
   }
 
   .severity-high {
