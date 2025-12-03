@@ -13,7 +13,7 @@ const Splash = () => {
   }, [navigate]);
 
   return (
-    <div className="mobile-container flex flex-col items-center justify-center min-h-screen bg-primary">
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-primary z-50 touch-none">
       <div className="animate-scale-in flex flex-col items-center gap-4">
         <div className="w-24 h-24 bg-primary-foreground/20 rounded-3xl flex items-center justify-center">
           <Shield size={56} className="text-primary-foreground" />

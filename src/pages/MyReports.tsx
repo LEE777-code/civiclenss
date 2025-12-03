@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush } from "lucide-react";
+import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
 const reports = [
@@ -7,6 +8,7 @@ const reports = [
     id: 1,
     title: "Broken Streetlight at Elm & 2nd",
     status: "Resolved",
+    severity: "Medium",
     category: "Streetlight Out",
     location: "Oakland, CA",
     date: "June 12, 2024",
@@ -16,6 +18,7 @@ const reports = [
     id: 2,
     title: "Graffiti on Park Wall",
     status: "Rejected",
+    severity: "Low",
     category: "Graffiti",
     location: "Oakland, CA",
     date: "May 28, 2024",
@@ -25,15 +28,42 @@ const reports = [
     id: 3,
     title: "Overflowing Bin at Plaza",
     status: "Pending",
+    severity: "High",
     category: "Waste",
     location: "Oakland, CA",
     date: "May 25, 2024",
     icon: Trash2,
   },
+  {
+    id: 4,
+    title: "Pothole on 5th Avenue",
+    status: "Pending",
+    severity: "High",
+    category: "Road",
+    location: "Oakland, CA",
+    date: "June 15, 2024",
+    icon: Trash2,
+  },
+  {
+    id: 5,
+    title: "Fallen Tree Branch",
+    status: "Resolved",
+    severity: "Medium",
+    category: "Nature",
+    location: "Oakland, CA",
+    date: "June 10, 2024",
+    icon: Lightbulb,
+  },
 ];
 
 const MyReports = () => {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [sortOption, setSortOption] = useState("latest");
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -48,8 +78,38 @@ const MyReports = () => {
     }
   };
 
+  const toggleFilter = (list: string[], item: string, setList: (l: string[]) => void) => {
+    if (list.includes(item)) {
+      setList(list.filter((i) => i !== item));
+    } else {
+      setList([...list, item]);
+    }
+  };
+
+  const filteredReports = reports
+    .filter((report) => {
+      const matchesSearch =
+        report.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        report.category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = filterStatus.length === 0 || filterStatus.includes(report.status);
+      const matchesSeverity = filterSeverity.length === 0 || filterSeverity.includes(report.severity);
+      return matchesSearch && matchesStatus && matchesSeverity;
+    })
+    .sort((a, b) => {
+      if (sortOption === "latest") {
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      } else if (sortOption === "priority-high-low") {
+        const severityOrder = { High: 3, Medium: 2, Low: 1 };
+        return (severityOrder[b.severity as keyof typeof severityOrder] || 0) - (severityOrder[a.severity as keyof typeof severityOrder] || 0);
+      } else if (sortOption === "priority-low-high") {
+        const severityOrder = { High: 3, Medium: 2, Low: 1 };
+        return (severityOrder[a.severity as keyof typeof severityOrder] || 0) - (severityOrder[b.severity as keyof typeof severityOrder] || 0);
+      }
+      return 0;
+    });
+
   return (
-    <div className="mobile-container min-h-screen bg-muted pb-24">
+    <div className="mobile-container min-h-screen bg-muted pb-24 relative">
       {/* Header */}
       <div className="sticky top-0 bg-background z-10 px-6 py-4 border-b border-border">
         <div className="flex items-center gap-4">
@@ -68,49 +128,172 @@ const MyReports = () => {
             type="text"
             placeholder="Search reports..."
             className="input-field pl-12"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        {/* Filter & Sort */}
-        <div className="flex gap-3 mb-4">
-          <button className="flex-1 btn-secondary flex items-center justify-center gap-2 py-2.5">
-            <ArrowUpDown size={18} className="text-inherit" />
-            <span className="text-inherit">Sort</span>
-          </button>
-          <button className="flex-1 btn-secondary flex items-center justify-center gap-2 py-2.5">
-            <Filter size={18} className="text-inherit" />
-            <span className="text-inherit">Filter</span>
-          </button>
+        {/* Filter & Sort Buttons */}
+        <div className="flex gap-3 mb-4 relative z-20">
+          <div className="flex-1 relative">
+            <button
+              className={`w-full btn-secondary flex items-center justify-center gap-2 py-2.5 ${showSortMenu ? 'bg-primary/10 text-primary border-primary/20' : ''}`}
+              onClick={() => { setShowSortMenu(!showSortMenu); setShowFilterMenu(false); }}
+            >
+              <ArrowUpDown size={18} className="text-inherit" />
+              <span className="text-inherit">Sort</span>
+            </button>
+
+            {/* Sort Menu */}
+            {showSortMenu && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-background rounded-xl shadow-lg border border-border p-2 animate-in fade-in zoom-in-95 duration-200 z-30">
+                {[
+                  { label: "Latest", value: "latest" },
+                  { label: "Priority (High to Low)", value: "priority-high-low" },
+                  { label: "Priority (Low to High)", value: "priority-low-high" },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => { setSortOption(option.value); setShowSortMenu(false); }}
+                    className={`w-full text-left px-4 py-3 rounded-lg text-sm flex items-center justify-between ${sortOption === option.value ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
+                      }`}
+                  >
+                    {option.label}
+                    {sortOption === option.value && <Check size={16} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 relative">
+            <button
+              className={`w-full btn-secondary flex items-center justify-center gap-2 py-2.5 ${showFilterMenu ? 'bg-primary/10 text-primary border-primary/20' : ''}`}
+              onClick={() => { setShowFilterMenu(!showFilterMenu); setShowSortMenu(false); }}
+            >
+              <Filter size={18} className="text-inherit" />
+              <span className="text-inherit">Filter</span>
+              {(filterStatus.length > 0 || filterSeverity.length > 0) && (
+                <span className="bg-primary text-primary-foreground text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
+                  {filterStatus.length + filterSeverity.length}
+                </span>
+              )}
+            </button>
+
+            {/* Filter Menu */}
+            {showFilterMenu && (
+              <div className="absolute top-full right-0 w-64 mt-2 bg-background rounded-xl shadow-lg border border-border p-4 animate-in fade-in zoom-in-95 duration-200 z-30">
+                <div className="mb-4">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase mb-2">Status</h3>
+                  <div className="space-y-2">
+                    {["Resolved", "Rejected", "Pending"].map((status) => (
+                      <label key={status} className="flex items-center gap-2 cursor-pointer">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${filterStatus.includes(status) ? "bg-primary border-primary" : "border-muted-foreground"
+                          }`}>
+                          {filterStatus.includes(status) && <Check size={12} className="text-primary-foreground" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filterStatus.includes(status)}
+                          onChange={() => toggleFilter(filterStatus, status, setFilterStatus)}
+                        />
+                        <span className="text-sm text-foreground">{status}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase mb-2">Severity</h3>
+                  <div className="space-y-2">
+                    {["Low", "Medium", "High"].map((severity) => (
+                      <label key={severity} className="flex items-center gap-2 cursor-pointer">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${filterSeverity.includes(severity) ? "bg-primary border-primary" : "border-muted-foreground"
+                          }`}>
+                          {filterSeverity.includes(severity) && <Check size={12} className="text-primary-foreground" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filterSeverity.includes(severity)}
+                          onChange={() => toggleFilter(filterSeverity, severity, setFilterSeverity)}
+                        />
+                        <span className="text-sm text-foreground">{severity}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border flex justify-end">
+                  <button
+                    onClick={() => { setFilterStatus([]); setFilterSeverity([]); }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Overlay to close menus when clicking outside */}
+        {(showSortMenu || showFilterMenu) && (
+          <div
+            className="fixed inset-0 z-10 bg-black/5"
+            onClick={() => { setShowSortMenu(false); setShowFilterMenu(false); }}
+          />
+        )}
 
         {/* Reports List */}
         <div className="space-y-3">
-          {reports.map((report, index) => (
-            <button
-              key={report.id}
-              onClick={() => navigate(`/report-details/${report.id}`)}
-              className="card-elevated w-full text-left animate-fade-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              <div className="flex gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-                  <report.icon size={24} className="text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-foreground text-sm">{report.title}</h3>
-                    <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${getStatusStyle(report.status)}`}>
-                      {report.status}
-                    </span>
+          {filteredReports.length > 0 ? (
+            filteredReports.map((report, index) => (
+              <button
+                key={report.id}
+                onClick={() => navigate(`/report-details/${report.id}`)}
+                className="card-elevated w-full text-left animate-fade-in"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                    <report.icon size={24} className="text-primary" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{report.category}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {report.location} • {report.date}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-foreground text-sm">{report.title}</h3>
+                      <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${getStatusStyle(report.status)}`}>
+                        {report.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">{report.category}</span>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className={`text-xs font-medium ${report.severity === "High" ? "text-red-500" :
+                          report.severity === "Medium" ? "text-amber-500" : "text-green-500"
+                        }`}>
+                        {report.severity} Priority
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {report.location} • {report.date}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No reports found matching your criteria.</p>
+              <button
+                onClick={() => { setSearchQuery(""); setFilterStatus([]); setFilterSeverity([]); }}
+                className="text-primary text-sm font-medium mt-2 hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
