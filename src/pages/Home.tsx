@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, AlertTriangle, Lightbulb } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
 import BottomNav from "@/components/BottomNav";
 
 const Home = () => {
   const navigate = useNavigate();
+  const { user } = useUser();
 
   const quickActions = [
     { icon: FileText, label: "Report an Issue", desc: "Submit a new report", path: "/report", color: "bg-primary" },
@@ -37,14 +39,16 @@ const Home = () => {
       <div className="bg-primary px-6 pt-12 pb-8 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-primary-foreground/80 text-sm">Welcome back, Citizen!</p>
+            <p className="text-primary-foreground/80 text-sm">
+              Welcome back, {user?.firstName || "Citizen"}!
+            </p>
           </div>
           <div className="flex items-center gap-2 text-primary-foreground/80">
             <MapPin size={16} />
             <span className="text-sm">Anna Nagar, Chennai</span>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2 text-primary-foreground mb-6">
           <Sun size={20} />
           <span className="text-sm">32°C Sunny</span>
@@ -105,9 +109,8 @@ const Home = () => {
               onClick={() => navigate(`/report-details/${issue.id}`)}
               className="card-elevated w-full flex items-center gap-4"
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                issue.severity === "High" ? "bg-red-100" : "bg-amber-100"
-              }`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${issue.severity === "High" ? "bg-red-100" : "bg-amber-100"
+                }`}>
                 <issue.icon size={24} className={
                   issue.severity === "High" ? "text-red-500" : "text-amber-500"
                 } />
@@ -115,9 +118,8 @@ const Home = () => {
               <div className="flex-1 text-left">
                 <h3 className="font-semibold text-foreground text-sm">{issue.title}</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    issue.severity === "High" ? "severity-high" : "severity-medium"
-                  }`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${issue.severity === "High" ? "severity-high" : "severity-medium"
+                    }`}>
                     {issue.severity}
                   </span>
                   <span className="text-xs text-muted-foreground">

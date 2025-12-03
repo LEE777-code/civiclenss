@@ -18,8 +18,8 @@ const Splash = () => {
         <div className="w-24 h-24 bg-primary-foreground/20 rounded-3xl flex items-center justify-center">
           <Shield size={56} className="text-primary-foreground" />
         </div>
-        <h1 className="text-3xl font-bold text-primary-foreground tracking-tight">
-          Civic Guardian
+        <h1 className="text-3xl font-bold text-primary-foreground tracking-tight text-center px-4">
+          CivicLens – Together, We Fix the City
         </h1>
       </div>
     </div>
