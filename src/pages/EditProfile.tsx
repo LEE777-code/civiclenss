@@ -159,13 +159,10 @@ const EditProfile = () => {
         <div className="flex flex-col items-center mb-8">
           <div className="relative">
             <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden">
-<<<<<<< HEAD
               {user?.imageUrl ? (
                 <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
-=======
-              {profileImage ? (
+              ) : profileImage ? (
                 <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
->>>>>>> c7bc9f6bf0a7ed97afe4bf735db5ba60bda01f9d
               ) : (
                 <User size={48} className="text-primary" />
               )}
@@ -177,18 +174,13 @@ const EditProfile = () => {
               <Camera size={16} className="text-primary-foreground" />
             </button>
           </div>
-<<<<<<< HEAD
           <h2 className="text-xl font-bold text-foreground mt-4">{formData.fullName || "User"}</h2>
-          <button className="text-primary text-sm font-medium mt-1">Change Photo</button>
-=======
-          <h2 className="text-xl font-bold text-foreground mt-4">{formData.fullName}</h2>
           <button
             onClick={() => setShowImageOptions(true)}
             className="text-primary text-sm font-medium mt-1"
           >
             Change Photo
           </button>
->>>>>>> c7bc9f6bf0a7ed97afe4bf735db5ba60bda01f9d
         </div>
 
         {/* Form */}
@@ -274,7 +266,6 @@ const EditProfile = () => {
               <option value="prefer-not">Prefer not to say</option>
             </select>
           </div>
-<<<<<<< HEAD
 
           <div>
             <label className="text-sm font-medium text-foreground mb-2 block">District</label>
@@ -300,24 +291,7 @@ const EditProfile = () => {
         >
           {loading ? "Saving..." : "Save Changes"}
         </button>
-=======
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-foreground mb-2 block">District</label>
-          <input
-            type="text"
-            value={formData.district}
-            onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-            className="input-field"
-          />
-        </div>
->>>>>>> c7bc9f6bf0a7ed97afe4bf735db5ba60bda01f9d
       </div>
-
-      <button onClick={handleSave} className="btn-primary mt-8">
-        Save Changes
-      </button>
 
       {/* Image Selection Modal */}
       {showImageOptions && (
