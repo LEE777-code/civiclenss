@@ -2,8 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-<<<<<<< HEAD
 import { ClerkProvider } from "@clerk/clerk-react";
+import { ThemeProvider } from "./hooks/use-theme";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -14,15 +14,9 @@ if (!PUBLISHABLE_KEY) {
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-            <App />
+            <ThemeProvider>
+                <App />
+            </ThemeProvider>
         </ClerkProvider>
     </StrictMode>
-=======
-import { ThemeProvider } from "./hooks/use-theme";
-
-createRoot(document.getElementById("root")!).render(
-	<ThemeProvider>
-		<App />
-	</ThemeProvider>
->>>>>>> c7bc9f6bf0a7ed97afe4bf735db5ba60bda01f9d
 );
