@@ -1,69 +1,55 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X } from "lucide-react";
+import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X, AlertTriangle } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
-const reports = [
-  {
-    id: 1,
-    title: "Broken Streetlight at Elm & 2nd",
-    status: "Resolved",
-    severity: "Medium",
-    category: "Streetlight Out",
-    location: "Oakland, CA",
-    date: "June 12, 2024",
-    icon: Lightbulb,
-  },
-  {
-    id: 2,
-    title: "Graffiti on Park Wall",
-    status: "Rejected",
-    severity: "Low",
-    category: "Graffiti",
-    location: "Oakland, CA",
-    date: "May 28, 2024",
-    icon: Paintbrush,
-  },
-  {
-    id: 3,
-    title: "Overflowing Bin at Plaza",
-    status: "Pending",
-    severity: "High",
-    category: "Waste",
-    location: "Oakland, CA",
-    date: "May 25, 2024",
-    icon: Trash2,
-  },
-  {
-    id: 4,
-    title: "Pothole on 5th Avenue",
-    status: "Pending",
-    severity: "High",
-    category: "Road",
-    location: "Oakland, CA",
-    date: "June 15, 2024",
-    icon: Trash2,
-  },
-  {
-    id: 5,
-    title: "Fallen Tree Branch",
-    status: "Resolved",
-    severity: "Medium",
-    category: "Nature",
-    location: "Oakland, CA",
-    date: "June 10, 2024",
-    icon: Lightbulb,
-  },
-];
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@clerk/clerk-react";
+import { useEffect } from "react";
 
 const MyReports = () => {
   const navigate = useNavigate();
+  const { user } = useUser();
+  const [reports, setReports] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [sortOption, setSortOption] = useState("latest");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchMyReports = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (data) {
+          setReports(data.map(report => ({
+            id: report.id,
+            title: report.title,
+            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            category: report.category,
+            location: report.location_name || "Unknown Location",
+            date: new Date(report.created_at).toLocaleDateString(),
+            icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
+              report.category === 'Garbage & Cleanliness' ? Trash2 :
+                report.category === 'Road Issues' ? AlertTriangle : Paintbrush, // Simple icon logic
+          })));
+        }
+      } catch (error) {
+        console.error("Error fetching my reports:", error);
+      }
+    };
+
+    fetchMyReports();
+  }, [user]);
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -271,7 +257,7 @@ const MyReports = () => {
                       <span className="text-xs text-muted-foreground">{report.category}</span>
                       <span className="text-xs text-muted-foreground">•</span>
                       <span className={`text-xs font-medium ${report.severity === "High" ? "text-red-500" :
-                          report.severity === "Medium" ? "text-amber-500" : "text-green-500"
+                        report.severity === "Medium" ? "text-amber-500" : "text-green-500"
                         }`}>
                         {report.severity} Priority
                       </span>

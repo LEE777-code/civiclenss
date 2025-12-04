@@ -1,22 +1,65 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@clerk/clerk-react";
+import { useState } from "react";
 import sampleImage from "@/assets/pages/page_1.jpg";
 
 const IssuePreview = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useUser();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const formData = location.state || {
     title: "Large Pothole on Main St",
     description: "Deep pothole causing traffic issues and potential danger to cyclists.",
     location: "123 Main Street, Anytown, USA",
     severity: "High",
+    category: "Road Issues",
     anonymous: true,
   };
 
-  const handleSubmit = () => {
-    toast.success("Issue reported successfully!");
-    navigate("/home");
+  const handleSubmit = async () => {
+    if (!user) {
+      toast.error("You must be logged in to submit a report");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Upload Image if exists (We'll skip actual file upload for now and store base64 or just URL if it was a real file upload flow)
+      // For this demo, we'll assume the image is small enough to store or we'll just store the text data.
+      // In a real app, you'd upload to Supabase Storage here.
+
+      const reportData = {
+        user_id: user.id,
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        severity: formData.severity.toLowerCase(),
+        location_name: formData.location,
+        status: 'pending',
+        image_url: formData.image, // Storing base64 for now (not recommended for production but works for demo)
+        // latitude: ... (if we had coordinates)
+        // longitude: ...
+      };
+
+      const { error } = await supabase
+        .from('reports')
+        .insert(reportData);
+
+      if (error) throw error;
+
+      toast.success("Issue reported successfully!");
+      navigate("/home");
+    } catch (error: any) {
+      console.error("Error submitting report:", error);
+      toast.error("Failed to submit report. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -91,7 +134,7 @@ const IssuePreview = () => {
               <Tag size={18} className="text-primary" />
               <div>
                 <div className="text-sm text-foreground font-medium">Category</div>
-                <div className="text-sm text-muted-foreground">Road Damage</div>
+                <div className="text-sm text-muted-foreground">{formData.category}</div>
               </div>
             </div>
             <div className="text-sm text-muted-foreground" />
@@ -111,7 +154,13 @@ const IssuePreview = () => {
 
         {/* Submit button */}
         <div className="">
-          <button onClick={handleSubmit} className="btn-gradient">Submit Issue</button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="btn-gradient flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : "Submit Issue"}
+          </button>
         </div>
 
         <div className="text-center mt-2">
