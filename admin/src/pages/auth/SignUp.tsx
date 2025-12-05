@@ -37,12 +37,7 @@ export default function SignUp() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (formData.state) {
-      setDistricts(getDistrictsForState(formData.state));
-      setFormData((prev) => ({ ...prev, district: "", localBody: "" }));
-    }
-  }, [formData.state]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +159,10 @@ export default function SignUp() {
               <Label htmlFor="state">State / Union Territory</Label>
               <Select
                 value={formData.state}
-                onValueChange={(value) => setFormData({ ...formData, state: value })}
+                onValueChange={(value) => {
+                  setDistricts(getDistrictsForState(value));
+                  setFormData({ ...formData, state: value, district: "", localBody: "" });
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select state or UT" />

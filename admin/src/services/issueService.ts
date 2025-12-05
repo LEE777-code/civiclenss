@@ -11,6 +11,20 @@ export interface IssueFilters {
   dateTo?: string;
 }
 
+export interface IssueStats {
+  total: number;
+  open: number;
+  inProgress: number;
+  resolved: number;
+  rejected: number;
+  byPriority: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+  byCategory: Record<string, number>;
+}
+
 export const issueService = {
   // Fetch all issues with optional filters
   async getIssues(filters?: IssueFilters): Promise<Issue[]> {
@@ -121,7 +135,7 @@ export const issueService = {
   },
 
   // Get issue statistics
-  async getIssueStats(filters?: { state?: string; district?: string }) {
+  async getIssueStats(filters?: { state?: string; district?: string }): Promise<IssueStats | null> {
     let query = supabase.from('issues').select('status, priority, category, created_at');
 
     if (filters?.state) {
@@ -139,7 +153,7 @@ export const issueService = {
       return null;
     }
 
-    const stats = {
+    const stats: IssueStats = {
       total: data.length,
       open: data.filter(i => i.status === 'open').length,
       inProgress: data.filter(i => i.status === 'in-progress').length,
@@ -150,7 +164,7 @@ export const issueService = {
         medium: data.filter(i => i.priority === 'medium').length,
         low: data.filter(i => i.priority === 'low').length,
       },
-      byCategory: data.reduce((acc: any, issue) => {
+      byCategory: data.reduce((acc: Record<string, number>, issue) => {
         acc[issue.category] = (acc[issue.category] || 0) + 1;
         return acc;
       }, {}),

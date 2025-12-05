@@ -4,13 +4,13 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { IssuesTable } from "@/components/dashboard/IssuesTable";
 import { IssueSummaryPanel } from "@/components/dashboard/IssueSummaryPanel";
 import { Issue } from "@/lib/supabase";
-import { issueService } from "@/services/issueService";
+import { issueService, IssueStats } from "@/services/issueService";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
   const { admin } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<IssueStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

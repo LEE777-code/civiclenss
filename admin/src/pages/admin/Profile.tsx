@@ -19,16 +19,17 @@ import {
   Legend,
 } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
-import { issueService } from "@/services/issueService";
+import { issueService, IssueStats } from "@/services/issueService";
 import { useUser } from "@clerk/clerk-react";
+import { Issue } from "@/lib/supabase";
 
 const COLORS = ["#0D9488", "#10B981", "#F59E0B", "#EF4444"];
 
 export default function Profile() {
   const { admin } = useAuth();
   const { user } = useUser();
-  const [stats, setStats] = useState<any>(null);
-  const [issues, setIssues] = useState<any[]>([]);
+  const [stats, setStats] = useState<IssueStats | null>(null);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,10 +60,10 @@ export default function Profile() {
   }
 
   // Generate performance data from issues
-  const performanceData = issues.reduce((acc: any[], issue: any) => {
+  const performanceData = issues.reduce((acc: { month: string; resolved: number }[], issue: Issue) => {
     const month = new Date(issue.created_at).toLocaleDateString("en-US", { month: "short" });
     const existing = acc.find((item) => item.month === month);
-    
+
     if (existing && issue.status === "resolved") {
       existing.resolved += 1;
     } else if (!existing) {
@@ -71,7 +72,7 @@ export default function Profile() {
         resolved: issue.status === "resolved" ? 1 : 0,
       });
     }
-    
+
     return acc;
   }, []).slice(-6);
 
@@ -83,7 +84,7 @@ export default function Profile() {
     { name: "Rejected", value: stats?.rejected || 0 },
   ].filter(item => item.value > 0);
 
-  const roleLabels: any = {
+  const roleLabels: Record<string, string> = {
     state: "State Admin",
     district: "District Admin",
     local: "Local Body Admin",

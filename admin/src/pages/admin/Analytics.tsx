@@ -16,14 +16,15 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { issueService } from "@/services/issueService";
+import { issueService, IssueStats } from "@/services/issueService";
+import { Issue } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 
 const COLORS = ["#0D9488", "#10B981", "#F59E0B", "#EF4444", "#3B82F6", "#8B5CF6"];
 
 export default function Analytics() {
-  const [stats, setStats] = useState<any>(null);
-  const [issues, setIssues] = useState<any[]>([]);
+  const [stats, setStats] = useState<IssueStats | null>(null);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,10 +60,10 @@ export default function Analytics() {
     : [];
 
   // Generate monthly trend from issues
-  const monthlyTrend = issues.reduce((acc: any[], issue: any) => {
+  const monthlyTrend = issues.reduce((acc: { month: string; reported: number; resolved: number }[], issue: Issue) => {
     const month = new Date(issue.created_at).toLocaleDateString("en-US", { month: "short" });
     const existing = acc.find((item) => item.month === month);
-    
+
     if (existing) {
       existing.reported += 1;
       if (issue.status === "resolved") existing.resolved += 1;
@@ -73,7 +74,7 @@ export default function Analytics() {
         resolved: issue.status === "resolved" ? 1 : 0,
       });
     }
-    
+
     return acc;
   }, []).slice(-6);
 
