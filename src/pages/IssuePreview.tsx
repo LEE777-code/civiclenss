@@ -1,11 +1,17 @@
+import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import sampleImage from "@/assets/pages/page_1.jpg";
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@clerk/clerk-react";
 
 const IssuePreview = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useUser();
+  const [submitting, setSubmitting] = useState(false);
+  
   const formData = location.state || {
     title: "Large Pothole on Main St",
     description: "Deep pothole causing traffic issues and potential danger to cyclists.",
@@ -14,9 +20,58 @@ const IssuePreview = () => {
     anonymous: true,
   };
 
-  const handleSubmit = () => {
-    toast.success("Issue reported successfully!");
-    navigate("/home");
+  const handleSubmit = async () => {
+    if (!formData.title) {
+      toast.error("Please provide a title for the issue");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Map severity to priority
+      const priorityMap: any = {
+        'Low': 'low',
+        'Medium': 'medium',
+        'High': 'high',
+      };
+
+      const issueData = {
+        title: formData.title,
+        description: formData.description || '',
+        category: 'Roads', // Default category, can be enhanced later
+        status: 'open',
+        priority: priorityMap[formData.severity] || 'medium',
+        location: formData.location,
+        district: 'Unknown', // Can be extracted from location
+        state: 'Unknown', // Can be extracted from location
+        image_url: formData.image || null,
+        reported_by: user?.id || 'anonymous',
+        reporter_name: formData.anonymous ? null : (user?.fullName || 'Unknown'),
+        is_anonymous: formData.anonymous,
+        upvotes: 0,
+      };
+
+      const { data, error } = await supabase
+        .from('issues')
+        .insert([issueData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error submitting issue:', error);
+        toast.error("Failed to submit issue. Please try again.");
+        return;
+      }
+
+      toast.success("Issue reported successfully!");
+      navigate("/home");
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -111,7 +166,20 @@ const IssuePreview = () => {
 
         {/* Submit button */}
         <div className="">
-          <button onClick={handleSubmit} className="btn-gradient">Submit Issue</button>
+          <button 
+            onClick={handleSubmit} 
+            disabled={submitting}
+            className="btn-gradient flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {submitting ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              'Submit Issue'
+            )}
+          </button>
         </div>
 
         <div className="text-center mt-2">
