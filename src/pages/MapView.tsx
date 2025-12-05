@@ -1,18 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapPin, AlertTriangle, ChevronUp } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import SwipeWrapper from "@/components/SwipeWrapper";
-
-const markers = [
-  { id: 1, lat: 30, lng: 40, type: "pothole", severity: "High" },
-  { id: 2, lat: 50, lng: 60, type: "streetlight", severity: "Medium" },
-  { id: 3, lat: 70, lng: 30, type: "graffiti", severity: "Low" },
-];
+import { supabase } from "@/lib/supabase";
 
 const MapView = () => {
   const navigate = useNavigate();
-  const [selectedIssue, setSelectedIssue] = useState<typeof markers[0] | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<any>(null);
+  const [markers, setMarkers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (data) {
+          // For demo purposes, we'll generate random coordinates around a center point
+          // since we might not have real GPS data for all reports yet.
+          // Center: 50% 50% (relative to container)
+          setMarkers(data.map((report, index) => ({
+            id: report.id,
+            // Use stored lat/lng if available, otherwise random
+            lat: report.latitude || 30 + Math.random() * 40,
+            lng: report.longitude || 20 + Math.random() * 60,
+            type: report.category,
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            title: report.title
+          })));
+        }
+      } catch (error) {
+        console.error("Error fetching map reports:", error);
+      }
+    };
+
+    fetchReports();
+  }, []);
 
   return (
     <SwipeWrapper className="mobile-container min-h-screen bg-background pb-20">
@@ -40,7 +67,7 @@ const MapView = () => {
               style={{ left: `${marker.lng}%`, top: `${marker.lat}%` }}
             >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${marker.severity === "High" ? "bg-red-500" :
-                  marker.severity === "Medium" ? "bg-amber-500" : "bg-green-500"
+                marker.severity === "Medium" ? "bg-amber-500" : "bg-green-500"
                 }`}>
                 <AlertTriangle size={20} className="text-primary-foreground" />
               </div>
@@ -80,7 +107,7 @@ const MapView = () => {
           <div className="w-10 h-1 bg-muted rounded-full mx-auto mb-4" />
           <div className="flex items-start gap-4">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedIssue.severity === "High" ? "bg-red-100" :
-                selectedIssue.severity === "Medium" ? "bg-amber-100" : "bg-green-100"
+              selectedIssue.severity === "Medium" ? "bg-amber-100" : "bg-green-100"
               }`}>
               <AlertTriangle size={24} className={
                 selectedIssue.severity === "High" ? "text-red-500" :
@@ -88,9 +115,9 @@ const MapView = () => {
               } />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-foreground">Graffiti on Wall</h3>
+              <h3 className="font-semibold text-foreground">{selectedIssue.title}</h3>
               <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${selectedIssue.severity === "High" ? "severity-high" :
-                  selectedIssue.severity === "Medium" ? "severity-medium" : "severity-low"
+                selectedIssue.severity === "Medium" ? "severity-medium" : "severity-low"
                 }`}>
                 {selectedIssue.severity}
               </span>

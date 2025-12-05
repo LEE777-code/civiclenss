@@ -13,6 +13,7 @@ const ReportIssue = () => {
     title: "",
     description: "",
     location: "123 Market St, San Francisco, CA",
+    category: "",
     severity: "Medium",
     anonymous: false,
   });
@@ -55,6 +56,11 @@ const ReportIssue = () => {
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
       toast.error("Please provide a title for the issue");
+      return;
+    }
+
+    if (!formData.category) {
+      toast.error("Please select a category");
       return;
     }
 
@@ -176,6 +182,25 @@ const ReportIssue = () => {
                   Change
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">Category</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="input-field"
+              >
+                <option value="">Select Category</option>
+                <option value="Road Issues">Road Issues</option>
+                <option value="Garbage & Cleanliness">Garbage & Cleanliness</option>
+                <option value="Water / Drainage">Water / Drainage</option>
+                <option value="Streetlight / Electricity">Streetlight / Electricity</option>
+                <option value="Public Safety">Public Safety</option>
+                <option value="Public Facilities">Public Facilities</option>
+                <option value="Parks & Environment">Parks & Environment</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
 
             <div>

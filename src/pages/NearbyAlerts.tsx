@@ -3,91 +3,51 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Filter, ArrowUpDown, Zap, Construction, Droplets, TreePine, Check, AlertTriangle, Lightbulb } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
-const allAlerts = [
-  // Original Alerts
-  {
-    id: 1,
-    title: "Power Outage on Main St",
-    description: "Crews are working to restore power, expected resolution by...",
-    time: "2h ago",
-    icon: Zap,
-    color: "bg-amber-100",
-    iconColor: "text-amber-600",
-    severity: "High",
-    status: "Pending",
-    type: "Alert"
-  },
-  {
-    id: 2,
-    title: "Road Closure on Elm Ave",
-    description: "Scheduled maintenance will close the road between 1st and...",
-    time: "1d ago",
-    icon: Construction,
-    color: "bg-orange-100",
-    iconColor: "text-orange-600",
-    severity: "Medium",
-    status: "In Progress",
-    type: "Alert"
-  },
-  {
-    id: 3,
-    title: "Water Main Break Report",
-    description: "A water main break has been reported near Oak Street...",
-    time: "3d ago",
-    icon: Droplets,
-    color: "bg-blue-100",
-    iconColor: "text-blue-600",
-    severity: "High",
-    status: "Resolved",
-    type: "Alert"
-  },
-  {
-    id: 4,
-    title: "Community Park Cleanup",
-    description: "Join us this Saturday at 9 AM for a community-wide park...",
-    time: "5d ago",
-    icon: TreePine,
-    color: "bg-green-100",
-    iconColor: "text-green-600",
-    severity: "Low",
-    status: "Scheduled",
-    type: "Event"
-  },
-  // Issues from Home Screen
-  {
-    id: 5,
-    title: "Large pothole on main road",
-    description: "Main St · 0.2 mi away",
-    time: "1h ago",
-    icon: AlertTriangle,
-    color: "bg-red-100",
-    iconColor: "text-red-500",
-    severity: "High",
-    status: "Pending",
-    type: "Issue"
-  },
-  {
-    id: 6,
-    title: "Streetlight not working",
-    description: "Oak Ave · 0.5 mi away",
-    time: "4h ago",
-    icon: Lightbulb,
-    color: "bg-amber-100",
-    iconColor: "text-amber-500",
-    severity: "Medium",
-    status: "Pending",
-    type: "Issue"
-  },
-];
+import { supabase } from "@/lib/supabase";
+import { useEffect } from "react";
 
 const NearbyAlerts = () => {
   const navigate = useNavigate();
+  const [allAlerts, setAllAlerts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [sortOption, setSortOption] = useState("latest");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20); // Fetch last 20 reports as alerts
+
+        if (data) {
+          setAllAlerts(data.map(report => ({
+            id: report.id,
+            title: report.title,
+            description: report.description || `${report.location_name} · 0.5 mi away`,
+            time: new Date(report.created_at).toLocaleDateString(),
+            icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
+              report.category === 'Water / Drainage' ? Droplets :
+                report.category === 'Parks & Environment' ? TreePine : AlertTriangle,
+            color: report.severity === 'high' ? "bg-red-100" : "bg-amber-100",
+            iconColor: report.severity === 'high' ? "text-red-500" : "text-amber-500",
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            type: "Issue"
+          })));
+        }
+      } catch (error) {
+        console.error("Error fetching alerts:", error);
+      }
+    };
+
+    fetchAlerts();
+  }, []);
 
   const toggleFilter = (list: string[], item: string, setList: (l: string[]) => void) => {
     if (list.includes(item)) {
