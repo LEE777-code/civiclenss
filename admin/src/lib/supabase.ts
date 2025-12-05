@@ -4,7 +4,57 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables');
+  console.warn('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  supabaseUrl || '',
+  supabaseAnonKey || ''
+);
+
+// Database Types
+export interface Issue {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: 'open' | 'in-progress' | 'resolved' | 'rejected';
+  priority: 'low' | 'medium' | 'high';
+  location: string;
+  latitude?: number;
+  longitude?: number;
+  district: string;
+  state: string;
+  image_url?: string;
+  reported_by: string;
+  reporter_name?: string;
+  is_anonymous: boolean;
+  upvotes: number;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  assigned_to?: string;
+}
+
+export interface Admin {
+  id: string;
+  clerk_id: string;
+  email: string;
+  name: string;
+  role: 'state' | 'district' | 'local' | 'super_admin';
+  state?: string;
+  district?: string;
+  local_body?: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+  created_at: string;
+}

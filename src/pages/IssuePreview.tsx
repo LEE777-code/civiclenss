@@ -1,16 +1,16 @@
+import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import sampleImage from "@/assets/pages/page_1.jpg";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/clerk-react";
-import { useState } from "react";
-import sampleImage from "@/assets/pages/page_1.jpg";
 
 const IssuePreview = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const formData = location.state || {
     title: "Large Pothole on Main St",
@@ -22,43 +22,56 @@ const IssuePreview = () => {
   };
 
   const handleSubmit = async () => {
-    if (!user) {
-      toast.error("You must be logged in to submit a report");
+    if (!formData.title) {
+      toast.error("Please provide a title for the issue");
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      // 1. Upload Image if exists (We'll skip actual file upload for now and store base64 or just URL if it was a real file upload flow)
-      // For this demo, we'll assume the image is small enough to store or we'll just store the text data.
-      // In a real app, you'd upload to Supabase Storage here.
+    setSubmitting(true);
 
-      const reportData = {
-        user_id: user.id,
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        severity: formData.severity.toLowerCase(),
-        location_name: formData.location,
-        status: 'pending',
-        image_url: formData.image, // Storing base64 for now (not recommended for production but works for demo)
-        // latitude: ... (if we had coordinates)
-        // longitude: ...
+    try {
+      // Map severity to priority
+      const priorityMap: any = {
+        'Low': 'low',
+        'Medium': 'medium',
+        'High': 'high',
       };
 
-      const { error } = await supabase
-        .from('reports')
-        .insert(reportData);
+      const issueData = {
+        title: formData.title,
+        description: formData.description || '',
+        category: 'Roads', // Default category, can be enhanced later
+        status: 'open',
+        priority: priorityMap[formData.severity] || 'medium',
+        location: formData.location,
+        district: 'Unknown', // Can be extracted from location
+        state: 'Unknown', // Can be extracted from location
+        image_url: formData.image || null,
+        reported_by: user?.id || 'anonymous',
+        reporter_name: formData.anonymous ? null : (user?.fullName || 'Unknown'),
+        is_anonymous: formData.anonymous,
+        upvotes: 0,
+      };
 
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from('issues')
+        .insert([issueData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error submitting issue:', error);
+        toast.error("Failed to submit issue. Please try again.");
+        return;
+      }
 
       toast.success("Issue reported successfully!");
       navigate("/home");
-    } catch (error: any) {
-      console.error("Error submitting report:", error);
-      toast.error("Failed to submit report. Please try again.");
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error("An error occurred. Please try again.");
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
@@ -156,10 +169,17 @@ const IssuePreview = () => {
         <div className="">
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={submitting}
             className="btn-gradient flex items-center justify-center gap-2 disabled:opacity-70"
           >
-            {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : "Submit Issue"}
+            {submitting ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              'Submit Issue'
+            )}
           </button>
         </div>
 

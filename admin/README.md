@@ -1,73 +1,141 @@
-# React + TypeScript + Vite
+# CivicLens Admin Web App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Production-ready admin dashboard for managing civic issues reported through the CivicLens mobile app.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Dashboard**: Real-time overview of all issues with statistics and recent activity
+- **Issues Management**: View, filter, search, and update issue statuses
+- **Analytics**: Interactive charts showing issue trends, category distribution, and resolution rates
+- **Profile**: Admin profile with performance analytics and activity graphs
+- **Categories**: Manage issue categories
+- **Admins**: View and manage administrator accounts
+- **Authentication**: Secure admin authentication via Clerk
+- **Database**: Direct integration with Supabase for real-time data
 
-## React Compiler
+## Setup Instructions
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Database Setup
 
-## Expanding the ESLint configuration
+Run the SQL schema in your Supabase project:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Navigate to your Supabase project dashboard
+# Go to SQL Editor
+# Copy and paste the contents of database-schema.sql
+# Execute the SQL
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Environment Variables
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+The admin app uses the same `.env` file as the mobile app (located in the project root):
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
+
+### 3. Install Dependencies
+
+```bash
+cd admin-web-app
+npm install
+```
+
+### 4. Run Development Server
+
+```bash
+npm run dev
+```
+
+The admin app will be available at `http://localhost:5173`
+
+### 5. Build for Production
+
+```bash
+npm run build
+```
+
+## Project Structure
+
+```
+admin-web-app/
+├── src/
+│   ├── components/
+│   │   ├── dashboard/       # Dashboard-specific components
+│   │   ├── layout/          # Layout components (Sidebar, etc.)
+│   │   └── ui/              # Reusable UI components (shadcn/ui)
+│   ├── contexts/
+│   │   └── AuthContext.tsx  # Authentication context
+│   ├── lib/
+│   │   ├── supabase.ts      # Supabase client & types
+│   │   └── utils.ts         # Utility functions
+│   ├── pages/
+│   │   ├── admin/           # Admin pages
+│   │   └── auth/            # Authentication pages
+│   ├── services/
+│   │   ├── authService.ts   # Admin authentication
+│   │   ├── categoryService.ts # Category management
+│   │   └── issueService.ts  # Issue management
+│   ├── App.tsx              # Main app component
+│   └── main.tsx             # Entry point
+├── database-schema.sql      # Database schema
+└── package.json
+```
+
+## Integration with Mobile App
+
+The admin web app shares the same database and authentication system with the citizen mobile app:
+
+- **Shared Database**: Both apps use the same Supabase database
+- **Shared .env**: Both apps use the same environment variables
+- **Real-time Sync**: Issues submitted from the mobile app appear instantly in the admin dashboard
+- **No Separate Backend**: All API calls go directly to Supabase
+
+## Key Features
+
+### Issues Management
+- View all issues with filtering by status, priority, and category
+- Search issues by title, ID, or location
+- Update issue status (Open → In Progress → Resolved)
+- Delete issues
+- View detailed issue information
+
+### Analytics
+- Monthly trend charts (reported vs resolved)
+- Category distribution pie charts
+- Issue status breakdown
+- Performance metrics
+
+### Profile
+- Admin information and role
+- Monthly resolution trend graph
+- Issue status distribution chart
+- Account settings
+
+## Technologies
+
+- **React 18** with TypeScript
+- **Vite** for fast development
+- **Tailwind CSS** for styling
+- **shadcn/ui** for UI components
+- **Recharts** for analytics graphs
+- **Clerk** for authentication
+- **Supabase** for database
+- **React Router** for navigation
+- **TanStack Query** for data fetching
+
+## Authentication
+
+Admins must sign up and be authenticated via Clerk. After signing up, admin accounts are stored in the `admins` table with role-based access control.
+
+## Database Tables
+
+- **issues**: All civic issues reported by citizens
+- **admins**: Administrator accounts with roles
+- **categories**: Issue categories for classification
+
+## Support
+
+For issues or questions, please refer to the main project documentation.
