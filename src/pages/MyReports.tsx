@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X, AlertTriangle, Download } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect } from "react";
+import { generateReportPDF, downloadPDF } from "@/services/pdfService";
+import { toast } from "sonner";
 
 const MyReports = () => {
   const navigate = useNavigate();
@@ -19,14 +21,28 @@ const MyReports = () => {
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
 
   const fetchMyReports = async () => {
-    if (!user) return;
+    // Get user ID from Clerk or localStorage (anonymous)
+    let userId = user?.id;
+    if (!userId) {
+      userId = localStorage.getItem('anonymous_user_id');
+    }
+
+    if (!userId) {
+      console.log('No user ID found');
+      return;
+    }
 
     try {
       const { data, error } = await supabase
         .from('reports')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching reports:', error);
+        return;
+      }
 
       if (data) {
         setReports(data.map(report => ({
@@ -37,9 +53,12 @@ const MyReports = () => {
           category: report.category,
           location: report.location_name || "Unknown Location",
           date: new Date(report.created_at).toLocaleDateString(),
+          image: report.image_url,
+          description: report.description,
+          createdAt: report.created_at,
           icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
             report.category === 'Garbage & Cleanliness' ? Trash2 :
-              report.category === 'Road Issues' ? AlertTriangle : Paintbrush, // Simple icon logic
+              report.category === 'Road Issues' ? AlertTriangle : Paintbrush,
         })));
       }
     } catch (error) {
@@ -50,28 +69,22 @@ const MyReports = () => {
   useEffect(() => {
     fetchMyReports();
 
-    if (!user) return;
-
     // Set up real-time subscription
     const channel = supabase
       .channel('my-reports')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          event: '*',
           schema: 'public',
           table: 'reports',
-          filter: `user_id=eq.${user.id}` // Only listen to this user's reports
         },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          // Refetch data when any change occurs
+        () => {
           fetchMyReports();
         }
       )
       .subscribe();
 
-    // Cleanup subscription on unmount
     return () => {
       supabase.removeChannel(channel);
     };
@@ -95,6 +108,21 @@ const MyReports = () => {
       setList(list.filter((i) => i !== item));
     } else {
       setList([...list, item]);
+    }
+  };
+
+  const handleDownloadPDF = async (report: any, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent navigating to details
+
+    try {
+      toast.info("Generating PDF...");
+      const pdfBytes = await generateReportPDF(report);
+      const filename = `Report_${report.id.substring(0, 8)}_${Date.now()}.pdf`;
+      downloadPDF(pdfBytes, filename);
+      toast.success("PDF downloaded successfully!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
     }
   };
 
@@ -262,38 +290,53 @@ const MyReports = () => {
         <div className="space-y-3">
           {filteredReports.length > 0 ? (
             filteredReports.map((report, index) => (
-              <button
+              <div
                 key={report.id}
-                onClick={() => navigate(`/report-details/${report.id}`)}
-                className="card-elevated w-full text-left animate-fade-in"
+                className="card-elevated w-full animate-fade-in"
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-                    <report.icon size={24} className="text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-foreground text-sm">{report.title}</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${getStatusStyle(report.status)}`}>
-                        {report.status}
-                      </span>
+                <button
+                  onClick={() => navigate(`/report-details/${report.id}`)}
+                  className="w-full text-left"
+                >
+                  <div className="flex gap-4">
+                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                      <report.icon size={24} className="text-primary" />
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">{report.category}</span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className={`text-xs font-medium ${report.severity === "High" ? "text-red-500" :
-                        report.severity === "Medium" ? "text-amber-500" : "text-green-500"
-                        }`}>
-                        {report.severity} Priority
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-foreground text-sm">{report.title}</h3>
+                        <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${getStatusStyle(report.status)}`}>
+                          {report.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">{report.category}</span>
+                        <span className="text-xs text-muted-foreground">•</span>
+                        <span className={`text-xs font-medium ${report.severity === "High" ? "text-red-500" :
+                          report.severity === "Medium" ? "text-amber-500" : "text-green-500"
+                          }`}>
+                          {report.severity} Priority
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {report.location} • {report.date}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {report.location} • {report.date}
-                    </p>
                   </div>
+                </button>
+
+                {/* Download button */}
+                <div className="flex justify-end mt-3 pt-3 border-t border-border">
+                  <button
+                    onClick={(e) => handleDownloadPDF(report, e)}
+                    className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                  >
+                    <Download size={16} />
+                    Download PDF
+                  </button>
                 </div>
-              </button>
+              </div>
             ))
           ) : (
             <div className="text-center py-12 text-muted-foreground">

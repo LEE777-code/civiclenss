@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
+import { Search, Filter, MoreHorizontal, Eye, Edit } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -98,28 +98,7 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
     }
   };
 
-  const handleDelete = async (issue: Issue | Report) => {
-    if (confirm("Are you sure you want to delete this report?")) {
-      try {
-        let success = false;
-        if (isReport(issue)) {
-          success = await reportService.deleteReport(issue.id);
-        } else {
-          success = await issueService.deleteIssue(issue.id);
-        }
-
-        if (success) {
-          toast.success("Deleted successfully");
-          // Don't reload, let realtime subscription handle the update
-        } else {
-          toast.error("Failed to delete");
-        }
-      } catch (error) {
-        console.error('Error deleting:', error);
-        toast.error("An error occurred");
-      }
-    }
-  };
+  // Delete functionality removed per admin request
 
   const handleViewDetails = (issue: Issue | Report) => {
     // Navigate to report details page
@@ -293,13 +272,7 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
                         <Edit className="mr-2 h-4 w-4" />
                         Mark Resolved
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="cursor-pointer text-destructive"
-                        onClick={() => handleDelete(issue)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
+                      {/* Delete option removed */}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </td>

@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Camera, MapPin, Eye, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Eye } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
-import { generateDescription } from "@/services/AIService";
 
 const ReportIssue = () => {
   const navigate = useNavigate();
@@ -19,7 +18,6 @@ const ReportIssue = () => {
   });
   const [selectedImage, setSelectedImage] = useState<string | null>(location.state?.image || null);
   const [showImageOptions, setShowImageOptions] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -33,25 +31,7 @@ const ReportIssue = () => {
     }
   };
 
-  const handleGenerateDescription = async () => {
-    if (!selectedImage) {
-      toast.error("Please upload an image first");
-      return;
-    }
-
-    setIsGenerating(true);
-    toast.info("Analyzing image...");
-
-    const description = await generateDescription(selectedImage);
-
-    if (description) {
-      setFormData(prev => ({ ...prev, description }));
-      toast.success("Description generated!");
-    } else {
-      toast.error("Failed to generate description. Check API key.");
-    }
-    setIsGenerating(false);
-  };
+  // AI description generation removed
 
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
@@ -62,28 +42,6 @@ const ReportIssue = () => {
     if (!formData.category) {
       toast.error("Please select a category");
       return;
-    }
-
-    // Auto-generate description if empty and image exists
-    if (!formData.description.trim() && selectedImage) {
-      setIsGenerating(true);
-      toast.info("Auto-generating description...");
-      const description = await generateDescription(selectedImage);
-      if (description) {
-        setFormData(prev => ({ ...prev, description }));
-        // Small delay to let state update before navigating? 
-        // Actually navigate uses the current object we pass, so we need to pass the new description directly.
-        navigate("/issue-preview", { state: { ...formData, description, image: selectedImage } });
-        setIsGenerating(false);
-        return;
-      } else {
-        toast.error("Failed to auto-generate description.");
-        setIsGenerating(false);
-        // Don't return, let them proceed or fail validation if description is mandatory? 
-        // User didn't say description is mandatory, but "make title mandatory".
-        // Let's proceed with empty description if AI fails, or maybe stop?
-        // Let's proceed.
-      }
     }
 
     navigate("/issue-preview", { state: { ...formData, image: selectedImage } });
@@ -146,17 +104,7 @@ const ReportIssue = () => {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-foreground">Description</label>
-                <button
-                  onClick={handleGenerateDescription}
-                  disabled={isGenerating || !selectedImage}
-                  className="text-xs flex items-center gap-1 text-primary font-medium disabled:opacity-50"
-                >
-                  {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                  Auto-generate
-                </button>
-              </div>
+              <label className="text-sm font-medium text-foreground mb-2 block">Description</label>
               <textarea
                 placeholder="Provide a detailed description of the issue."
                 value={formData.description}
@@ -246,10 +194,9 @@ const ReportIssue = () => {
 
         <button
           onClick={handleSubmit}
-          disabled={isGenerating}
-          className="btn-primary flex items-center justify-center gap-2 disabled:opacity-70"
+          className="btn-primary flex items-center justify-center gap-2"
         >
-          {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Eye size={20} />}
+          <Eye size={20} />
           Preview
         </button>
         <p className="text-center text-sm text-muted-foreground -mt-2">Tap to preview before final submission</p>
