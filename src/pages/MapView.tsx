@@ -1,9 +1,61 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, AlertTriangle, ChevronUp } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import BottomNav from "@/components/BottomNav";
 import SwipeWrapper from "@/components/SwipeWrapper";
 import { supabase } from "@/lib/supabase";
+
+// Fix for default Leaflet marker icons in React/Vite
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Custom icons for severity
+// Custom icons for severity using pure CSS (L.divIcon)
+const getSeverityIcon = (severity: string) => {
+  let colorClass = "bg-green-500 shadow-green-500/50";
+  if (severity === "High") colorClass = "bg-red-500 shadow-red-500/50";
+  else if (severity === "Medium") colorClass = "bg-amber-500 shadow-amber-500/50";
+
+  return L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div class="${colorClass} w-6 h-6 rounded-full border-2 border-white shadow-lg pulse-marker"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+  });
+};
+
+// Component to fit bounds
+const FitBoundsEvents = ({ markers }: { markers: any[] }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (markers.length > 0) {
+      const valid = markers.filter(m => m.lat && m.lng);
+      if (valid.length > 0) {
+        const bounds = L.latLngBounds(valid.map(m => [m.lat, m.lng]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    } else {
+      // Try to locate user if no markers
+      map.locate({ setView: true, maxZoom: 16 });
+    }
+  }, [markers, map]);
+  return null;
+};
+
+const defaultCenter: [number, number] = [20.5937, 78.9629]; // India
 
 const MapView = () => {
   const navigate = useNavigate();
@@ -16,22 +68,23 @@ const MapView = () => {
         const { data, error } = await supabase
           .from('reports')
           .select('*')
+          // .eq('status', 'pending') // Temporarily show ALL reports for debugging
           .order('created_at', { ascending: false })
-          .limit(20);
+          .limit(50); // Fetch more than Home (5) to populate the map well
 
         if (data) {
-          // For demo purposes, we'll generate random coordinates around a center point
-          // since we might not have real GPS data for all reports yet.
-          // Center: 50% 50% (relative to container)
-          setMarkers(data.map((report, index) => ({
-            id: report.id,
-            // Use stored lat/lng if available, otherwise random
-            lat: report.latitude || 30 + Math.random() * 40,
-            lng: report.longitude || 20 + Math.random() * 60,
-            type: report.category,
-            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-            title: report.title
-          })));
+          const validMarkers = data
+            .filter(r => r.latitude && r.longitude)
+            .map((report) => ({
+              id: report.id,
+              lat: parseFloat(report.latitude),
+              lng: parseFloat(report.longitude),
+              type: report.category,
+              severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+              title: report.title,
+              originalData: report
+            }));
+          setMarkers(validMarkers);
         }
       } catch (error) {
         console.error("Error fetching map reports:", error);
@@ -41,48 +94,47 @@ const MapView = () => {
     fetchReports();
   }, []);
 
+  // Debug logs
+  useEffect(() => {
+    console.log("Current Markers State:", markers);
+  }, [markers]);
+
   return (
-    <SwipeWrapper className="mobile-container min-h-screen bg-background pb-20">
+    <SwipeWrapper className="mobile-container h-screen flex flex-col bg-background pb-20">
       {/* Map Area */}
-      <div className="relative h-[70vh] bg-gradient-to-br from-primary/5 to-primary/10">
-        {/* Simulated Map */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute inset-0 opacity-20">
-            {/* Grid pattern to simulate map */}
-            <div className="w-full h-full" style={{
-              backgroundImage: `
-                linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px)
-              `,
-              backgroundSize: '40px 40px'
-            }} />
-          </div>
+      <div className="relative flex-1 w-full z-0">
+        <MapContainer
+          center={defaultCenter}
+          zoom={5}
+          style={{ height: "100%", width: "100%" }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          <FitBoundsEvents markers={markers} />
 
           {/* Markers */}
           {markers.map((marker) => (
-            <button
+            <Marker
               key={marker.id}
-              onClick={() => setSelectedIssue(marker)}
-              className="absolute transform -translate-x-1/2 -translate-y-1/2 animate-pulse-soft"
-              style={{ left: `${marker.lng}%`, top: `${marker.lat}%` }}
+              position={[marker.lat, marker.lng]}
+              icon={getSeverityIcon(marker.severity)}
+              eventHandlers={{
+                click: () => {
+                  setSelectedIssue(marker);
+                },
+              }}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${marker.severity === "High" ? "bg-red-500" :
-                marker.severity === "Medium" ? "bg-amber-500" : "bg-green-500"
-                }`}>
-                <AlertTriangle size={20} className="text-primary-foreground" />
-              </div>
-            </button>
+            </Marker>
           ))}
 
-          {/* Current Location */}
-          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
-            <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-primary-foreground shadow-lg" />
-            <div className="w-12 h-12 bg-blue-500/20 rounded-full absolute -inset-4 animate-ping" />
-          </div>
-        </div>
+        </MapContainer>
 
         {/* Legend */}
-        <div className="absolute top-4 left-4 bg-card rounded-xl p-3 shadow-lg">
+        <div className="absolute top-4 left-4 bg-card rounded-xl p-3 shadow-lg z-[1000]">
           <p className="text-xs font-semibold text-foreground mb-2">Nearby Issues</p>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -103,7 +155,7 @@ const MapView = () => {
 
       {/* Issue Details Panel */}
       {selectedIssue && (
-        <div className="absolute bottom-20 left-0 right-0 bg-card rounded-t-3xl shadow-2xl p-6 animate-slide-up">
+        <div className="absolute bottom-20 left-0 right-0 bg-card rounded-t-3xl shadow-2xl p-6 animate-slide-up z-10">
           <div className="w-10 h-1 bg-muted rounded-full mx-auto mb-4" />
           <div className="flex items-start gap-4">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedIssue.severity === "High" ? "bg-red-100" :
