@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, User, Tag, AlertCircle, CheckCircle2, XCircle, Clock, Loader2, Eye } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, User, Tag, AlertCircle, CheckCircle2, XCircle, Clock, Loader2, Eye, Send, Mail } from "lucide-react";
 import { reportService, Report } from "@/services/reportService";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { getOfficers, assignOfficerToReport, Officer } from "@/services/officerService";
+import { assignReportViaWhatsApp } from "@/services/whatsappService";
+import { assignReportViaEmail } from "@/services/emailService";
 
 export default function ReportDetailsPage() {
     const { id } = useParams();
@@ -14,6 +17,9 @@ export default function ReportDetailsPage() {
     const [report, setReport] = useState<Report | null>(null);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
+    const [officers, setOfficers] = useState<Officer[]>([]);
+    const [showAssignDialog, setShowAssignDialog] = useState(false);
+    const [selectedOfficer, setSelectedOfficer] = useState<Officer | null>(null);
 
     const fetchReport = async () => {
         if (!id) return;
@@ -38,6 +44,7 @@ export default function ReportDetailsPage() {
 
     useEffect(() => {
         fetchReport();
+        loadOfficers(); // Load officers list
 
         if (!id) return;
 
@@ -101,6 +108,89 @@ export default function ReportDetailsPage() {
             toast.error("An error occurred");
         } finally {
             setUpdating(false);
+        }
+    };
+
+    const loadOfficers = async () => {
+        const officersList = await getOfficers();
+        setOfficers(officersList);
+    };
+
+    const handleAssignOfficer = async () => {
+        if (!selectedOfficer || !report || !adminEmail) return;
+
+        try {
+            // Save assignment to database
+            const success = await assignOfficerToReport(report.id, selectedOfficer.id, adminEmail);
+
+            if (success) {
+                // Open WhatsApp with pre-filled message
+                const whatsappData = {
+                    id: report.id,
+                    title: report.title,
+                    category: report.category,
+                    severity: report.severity,
+                    description: report.description || '',
+                    location_name: report.location_name || '',
+                    latitude: report.latitude,
+                    longitude: report.longitude,
+                    image_url: report.image_url,
+                    created_at: report.created_at || new Date().toISOString(),
+                };
+
+                assignReportViaWhatsApp(selectedOfficer, whatsappData);
+
+                toast.success(`Report assigned to ${selectedOfficer.name}. WhatsApp opened!`);
+                setShowAssignDialog(false);
+                setSelectedOfficer(null);
+
+                // Refresh report to show assignment
+                fetchReport();
+            } else {
+                toast.error("Failed to assign officer");
+            }
+        } catch (error) {
+            console.error("Error assigning officer:", error);
+            toast.error("An error occurred");
+        }
+    };
+
+    const handleAssignOfficerEmail = async () => {
+        if (!selectedOfficer || !report || !adminEmail) return;
+
+        try {
+            // Save assignment to database
+            const success = await assignOfficerToReport(report.id, selectedOfficer.id, adminEmail);
+
+            if (success) {
+                // Open Email client with pre-filled message
+                const emailData = {
+                    id: report.id,
+                    title: report.title,
+                    category: report.category,
+                    severity: report.severity,
+                    description: report.description || '',
+                    location_name: report.location_name || '',
+                    latitude: report.latitude,
+                    longitude: report.longitude,
+                    image_url: report.image_url,
+                    created_at: report.created_at || new Date().toISOString(),
+                };
+
+                assignReportViaEmail(selectedOfficer, emailData);
+
+                toast.success(`Report assigned to ${selectedOfficer.name}. Email opened!`);
+                setShowAssignDialog(false);
+                setSelectedOfficer(null);
+
+                // Refresh report to show assignment
+                fetchReport();
+            } else {
+                toast.error("Failed to assign officer");
+            }
+        } catch (error) {
+            console.error("Error assigning officer:", error);
+            toast.error("An error occurred");
         }
     };
 
@@ -321,6 +411,35 @@ export default function ReportDetailsPage() {
                         </div>
                     </div>
 
+                    {/* Officer Assignment */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h3 className="font-semibold text-foreground mb-4">Assign to Officer</h3>
+                        <div className="space-y-2">
+                            <Button
+                                onClick={() => {
+                                    setShowAssignDialog(true);
+                                    if (officers.length === 0) loadOfficers();
+                                }}
+                                variant="outline"
+                                className="w-full justify-start"
+                            >
+                                <Send className="h-4 w-4 mr-2" />
+                                Assign via WhatsApp
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    setShowAssignDialog(true);
+                                    if (officers.length === 0) loadOfficers();
+                                }}
+                                variant="outline"
+                                className="w-full justify-start"
+                            >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Assign via Email
+                            </Button>
+                        </div>
+                    </div>
+
                     {/* Stats */}
                     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
                         <h3 className="font-semibold text-foreground mb-4">Statistics</h3>
@@ -345,6 +464,128 @@ export default function ReportDetailsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Officer Assignment Dialog */}
+            {showAssignDialog && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-background rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
+                        {/* Header */}
+                        <div className="p-6 border-b border-border">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-foreground">Assign to Officer</h2>
+                                <button
+                                    onClick={() => {
+                                        setShowAssignDialog(false);
+                                        setSelectedOfficer(null);
+                                    }}
+                                    className="text-muted-foreground hover:text-foreground"
+                                >
+                                    <XCircle className="h-6 w-6" />
+                                </button>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-2">
+                                Select an admin to assign this report via WhatsApp
+                            </p>
+                        </div>
+
+                        {/* Officers List */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {officers.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                    <p className="text-muted-foreground">No officers available</p>
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Add phone numbers to admin accounts to enable assignments
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {officers.map((officer) => (
+                                        <div
+                                            key={officer.id}
+                                            className={`rounded-lg border p-4 cursor-pointer transition-all ${selectedOfficer?.id === officer.id
+                                                ? 'border-primary bg-primary/5'
+                                                : 'border-border hover:border-primary/50'
+                                                }`}
+                                            onClick={() => setSelectedOfficer(officer)}
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <h3 className="font-semibold text-foreground">
+                                                        {officer.name}
+                                                    </h3>
+                                                    <p className="text-sm text-muted-foreground mt-1">
+                                                        {officer.email}
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                        {officer.department && (
+                                                            <span className="text-xs px-2 py-1 bg-muted rounded-full">
+                                                                🏢 {officer.department}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                                                            {officer.role}
+                                                        </span>
+                                                        {officer.state && (
+                                                            <span className="text-xs px-2 py-1 bg-muted rounded-full">
+                                                                📍 {officer.state}
+                                                                {officer.district && `, ${officer.district}`}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-2">
+                                                        📱 {officer.phone}
+                                                    </p>
+                                                </div>
+                                                {selectedOfficer?.id === officer.id && (
+                                                    <div className="shrink-0">
+                                                        <CheckCircle2 className="h-5 w-5 text-primary" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-border">
+                            <div className="flex flex-col gap-3">
+                                <div className="flex gap-3">
+                                    <Button
+                                        onClick={handleAssignOfficer}
+                                        disabled={!selectedOfficer}
+                                        className="flex-1"
+                                    >
+                                        <Send className="h-4 w-4 mr-2" />
+                                        Send via WhatsApp
+                                    </Button>
+                                    <Button
+                                        onClick={handleAssignOfficerEmail}
+                                        disabled={!selectedOfficer}
+                                        className="flex-1"
+                                        variant="secondary"
+                                    >
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        Send via Email
+                                    </Button>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowAssignDialog(false);
+                                        setSelectedOfficer(null);
+                                    }}
+                                    className="w-full"
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
