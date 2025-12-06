@@ -84,8 +84,8 @@ const IssuePreview = () => {
         status: 'pending', // Reports use 'pending' instead of 'open'
         severity: severityMap[formData.severity] || 'medium',
         location_name: formData.location, // Reports use 'location_name' instead of 'location'
-        latitude: null, // Can be added if you have GPS coordinates
-        longitude: null, // Can be added if you have GPS coordinates
+        latitude: formData.latitude || null, // Use coordinates if available
+        longitude: formData.longitude || null, // Use coordinates if available
         image_url: formData.image || null,
         user_id: userId,
         upvotes: 0,

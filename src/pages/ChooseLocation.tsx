@@ -135,8 +135,8 @@ const ChooseLocation = () => {
       state: {
         ...previousFormData,
         location: location.address,
-        lat: location.lat,
-        lng: location.lng
+        latitude: location.lat,  // Use 'latitude' to match database schema
+        longitude: location.lng   // Use 'longitude' to match database schema
       }
     });
   };

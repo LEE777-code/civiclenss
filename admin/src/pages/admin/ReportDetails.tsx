@@ -159,11 +159,14 @@ export default function ReportDetailsPage() {
         if (!selectedOfficer || !report || !adminEmail) return;
 
         try {
+            setUpdating(true);
+            toast.info("Sending email...");
+
             // Save assignment to database
             const success = await assignOfficerToReport(report.id, selectedOfficer.id, adminEmail);
 
             if (success) {
-                // Open Email client with pre-filled message
+                // Send email via Resend backend
                 const emailData = {
                     id: report.id,
                     title: report.title,
@@ -177,20 +180,24 @@ export default function ReportDetailsPage() {
                     created_at: report.created_at || new Date().toISOString(),
                 };
 
-                assignReportViaEmail(selectedOfficer, emailData);
+                const result = await assignReportViaEmail(selectedOfficer, emailData, adminEmail);
 
-                toast.success(`Report assigned to ${selectedOfficer.name}. Email opened!`);
-                setShowAssignDialog(false);
-                setSelectedOfficer(null);
-
-                // Refresh report to show assignment
-                fetchReport();
+                if (result.success) {
+                    toast.success(`Email sent to ${selectedOfficer.name} successfully!`);
+                    setShowAssignDialog(false);
+                    setSelectedOfficer(null);
+                    fetchReport();
+                } else {
+                    toast.error(result.error || "Failed to send email");
+                }
             } else {
                 toast.error("Failed to assign officer");
             }
         } catch (error) {
             console.error("Error assigning officer:", error);
             toast.error("An error occurred");
+        } finally {
+            setUpdating(false);
         }
     };
 

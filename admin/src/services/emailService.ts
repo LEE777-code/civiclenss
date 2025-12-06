@@ -1,4 +1,4 @@
-// Email service for officer assignments
+// Email service using Resend backend API
 
 export interface EmailReportData {
     id: string;
@@ -19,97 +19,93 @@ export interface Officer {
     department?: string | null;
 }
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
 /**
- * Generates email subject for report assignment
+ * Send report assignment email via Resend backend
  */
-export function generateEmailSubject(report: EmailReportData): string {
-    return `[CivicLens] New Report Assignment: ${report.title} (${report.severity.toUpperCase()})`;
+export async function assignReportViaEmail(
+    officer: Officer,
+    report: EmailReportData,
+    assignedBy: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+        const googleMapsLink = report.latitude && report.longitude
+            ? `https://www.google.com/maps?q=${report.latitude},${report.longitude}`
+            : null;
+
+        const response = await fetch(`${BACKEND_URL}/api/send-report-assignment`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                officerEmail: officer.email,
+                officerName: officer.name,
+                reportId: report.id.substring(0, 8).toUpperCase(),
+                title: report.title,
+                category: report.category,
+                severity: report.severity,
+                description: report.description,
+                locationName: report.location_name,
+                googleMapsLink,
+                imageUrl: report.image_url,
+                reportedAt: new Date(report.created_at).toLocaleString(),
+                assignedBy,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to send email');
+        }
+
+        return {
+            success: true,
+            message: data.message,
+        };
+    } catch (error) {
+        console.error('Error sending email:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to send email',
+        };
+    }
 }
 
 /**
- * Generates email body for report assignment
+ * Send custom email via backend
  */
-export function generateEmailBody(report: EmailReportData): string {
-    const googleMapsLink = report.latitude && report.longitude
-        ? `https://www.google.com/maps?q=${report.latitude},${report.longitude}`
-        : 'Location not available';
+export async function sendEmail(
+    to: string,
+    subject: string,
+    html: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/send-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to, subject, html }),
+        });
 
-    const body = `Dear Officer,
+        const data = await response.json();
 
-You have been assigned a new civic report from CivicLens Admin Panel.
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to send email');
+        }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REPORT DETAILS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Report ID: ${report.id.substring(0, 8).toUpperCase()}
-Title: ${report.title}
-Category: ${report.category}
-Severity: ${report.severity.toUpperCase()}
-Status: ASSIGNED
-Reported On: ${new Date(report.created_at).toLocaleString()}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LOCATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Address: ${report.location_name}
-Google Maps: ${googleMapsLink}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DESCRIPTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-${report.description || 'No description provided'}
-
-${report.image_url ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ATTACHED IMAGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-View Image: ${report.image_url}
-` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ACTION REQUIRED
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Please review this report and take appropriate action at the earliest.
-
-For urgent matters, please contact the admin panel immediately.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-This is an automated message from CivicLens Admin Panel.
-Please do not reply directly to this email.
-
-Best regards,
-CivicLens Admin Team`;
-
-    return body;
-}
-
-/**
- * Generates mailto: link for email client
- */
-export function generateMailtoLink(email: string, subject: string, body: string): string {
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(body);
-
-    return `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
-}
-
-/**
- * Opens email client with pre-filled report details
- */
-export function openEmailClient(email: string, subject: string, body: string): void {
-    const mailtoLink = generateMailtoLink(email, subject, body);
-    window.location.href = mailtoLink;
-}
-
-/**
- * Assign report to officer via email
- */
-export function assignReportViaEmail(officer: Officer, report: EmailReportData): void {
-    const subject = generateEmailSubject(report);
-    const body = generateEmailBody(report);
-    openEmailClient(officer.email, subject, body);
+        return {
+            success: true,
+            message: data.message,
+        };
+    } catch (error) {
+        console.error('Error sending email:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to send email',
+        };
+    }
 }
