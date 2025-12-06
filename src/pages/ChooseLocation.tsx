@@ -1,18 +1,81 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Search, MapPin, LocateFixed, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, LocateFixed, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// Fix for default Leaflet marker icons
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Component to handle map clicks
+function LocationMarker({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const map = useMapEvents({
+    click(e) {
+      map.flyTo(e.latlng, map.getZoom());
+      onLocationSelect(e.latlng.lat, e.latlng.lng);
+    },
+  });
+
+  return null;
+}
+
+// Component to handle external location updates
+const RecenterMap = ({ lat, lng }: { lat: number, lng: number }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo([lat, lng], 16);
+  }, [lat, lng, map]);
+  return null;
+}
 
 const ChooseLocation = () => {
   const navigate = useNavigate();
-  const { state: previousFormData } = useLocation(); // Get form data passed from ReportIssue
+  const locationState = useLocation().state as any; // Type assertion since useLocation state is unknown
+  const previousFormData = locationState || {};
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [location, setLocation] = useState({
-    address: "123 Main Street, Anytown",
-    lat: 34.0522,
-    lng: -118.2437,
+    address: "Tap on map to select",
+    lat: 20.5937,
+    lng: 78.9629,
   });
+
+  const updateLocation = async (lat: number, lng: number) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+      const data = await response.json();
+
+      setLocation({
+        address: data.display_name || "Unknown Location",
+        lat: lat,
+        lng: lng,
+      });
+      toast.success("Location updated");
+    } catch (error) {
+      console.error("Error fetching address:", error);
+      // Still update coordinates
+      setLocation(prev => ({ ...prev, lat, lng, address: "Selected Location" }));
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -24,25 +87,7 @@ const ChooseLocation = () => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        try {
-          // Reverse geocoding using Nominatim
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const data = await response.json();
-
-          setLocation({
-            address: data.display_name || "Unknown Location",
-            lat: latitude,
-            lng: longitude,
-          });
-          toast.success("Location updated to current position");
-        } catch (error) {
-          console.error("Error fetching address:", error);
-          toast.error("Failed to fetch address details");
-        } finally {
-          setIsLoading(false);
-        }
+        updateLocation(latitude, longitude);
       },
       (error) => {
         console.error("Geolocation error:", error);
@@ -64,11 +109,15 @@ const ChooseLocation = () => {
 
       if (data && data.length > 0) {
         const result = data[0];
+        const newLat = parseFloat(result.lat);
+        const newLng = parseFloat(result.lon);
+
         setLocation({
           address: result.display_name,
-          lat: parseFloat(result.lat),
-          lng: parseFloat(result.lon),
+          lat: newLat,
+          lng: newLng,
         });
+
         toast.success("Location found");
       } else {
         toast.error("Location not found");
@@ -82,18 +131,18 @@ const ChooseLocation = () => {
   };
 
   const handleConfirm = () => {
-    // Navigate back to ReportIssue with updated location and preserved form data
     navigate("/report", {
       state: {
         ...previousFormData,
         location: location.address,
-        // We could also pass lat/lng if needed in the future
+        lat: location.lat,
+        lng: location.lng
       }
     });
   };
 
   return (
-    <div className="mobile-container min-h-screen bg-background">
+    <div className="mobile-container min-h-screen bg-background flex flex-col">
       {/* Header */}
       <div className="sticky top-0 bg-background z-20 px-6 py-4 border-b border-border">
         <div className="flex items-center gap-4">
@@ -105,7 +154,7 @@ const ChooseLocation = () => {
       </div>
 
       {/* Search */}
-      <div className="px-6 py-4">
+      <div className="px-6 py-4 z-10">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
           <input
@@ -124,23 +173,29 @@ const ChooseLocation = () => {
         </div>
       </div>
 
-      {/* Map Placeholder */}
-      <div className="relative h-[45vh] bg-muted">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-primary/10 flex items-center justify-center">
-          <div className="text-center px-6">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
-              <MapPin size={32} className="text-primary-foreground" />
-            </div>
-            <div className="bg-background rounded-xl px-4 py-2 shadow-lg max-w-xs mx-auto">
-              <p className="font-medium text-foreground text-sm line-clamp-2">{location.address}</p>
-            </div>
-          </div>
-        </div>
+      {/* Map Area */}
+      <div className="relative flex-1 bg-muted min-h-[45vh] w-full z-0">
+        <MapContainer
+          center={[20.5937, 78.9629]}
+          zoom={5}
+          style={{ width: '100%', height: '100%', position: 'absolute' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          <LocationMarker onLocationSelect={updateLocation} />
+          <RecenterMap lat={location.lat} lng={location.lng} />
+
+          <Marker position={[location.lat, location.lng]} />
+        </MapContainer>
 
         {/* Current Location Button */}
         <button
           onClick={handleCurrentLocation}
-          className="absolute bottom-4 right-4 w-12 h-12 bg-background rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors"
+          className="absolute bottom-4 right-4 w-12 h-12 bg-background rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors z-[1000]"
           disabled={isLoading}
         >
           {isLoading ? (
@@ -152,14 +207,16 @@ const ChooseLocation = () => {
       </div>
 
       {/* Location Info */}
-      <div className="px-6 py-4">
+      <div className="px-6 py-4 bg-background">
         <p className="text-sm text-muted-foreground text-center mb-4">
-          Search or use current location to set the address
+          Tap on the map or search to set location
         </p>
 
         <div className="card-elevated mb-4">
           <div className="flex items-center gap-3 mb-2">
-            <MapPin size={20} className="text-primary shrink-0" />
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <LocateFixed size={16} className="text-primary" />
+            </div>
             <span className="font-medium text-foreground line-clamp-2">{location.address}</span>
           </div>
           <div className="flex items-center justify-between text-sm text-muted-foreground">
