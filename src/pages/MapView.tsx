@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import BottomNav from "@/components/BottomNav";
@@ -28,13 +28,43 @@ const getSeverityIcon = (severity: string) => {
   if (severity === "High") colorClass = "bg-red-500 shadow-red-500/50";
   else if (severity === "Medium") colorClass = "bg-amber-500 shadow-amber-500/50";
 
+  // Slightly larger icon for better visibility on mobile
   return L.divIcon({
     className: 'custom-div-icon',
-    html: `<div class="${colorClass} w-6 h-6 rounded-full border-2 border-white shadow-lg pulse-marker"></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -12]
+    html: `<div class="${colorClass} w-8 h-8 rounded-full border-2 border-white shadow-lg pulse-marker"></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -14]
   });
+};
+
+// Geocode a location name using Nominatim (OpenStreetMap)
+const geocodeLocation = async (location: string) => {
+  if (!location) return null;
+  try {
+    // Use cached result to avoid repeated requests
+    const cacheKey = `geocode:${location}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    const json = await res.json();
+    if (Array.isArray(json) && json.length > 0) {
+      const lat = parseFloat(json[0].lat);
+      const lon = parseFloat(json[0].lon);
+      const result = { lat, lon };
+      try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch (e) { }
+      return result;
+    }
+  } catch (e) {
+    console.warn('Geocode failed for', location, e);
+  }
+  return null;
 };
 
 // Component to fit bounds
@@ -68,23 +98,47 @@ const MapView = () => {
         const { data, error } = await supabase
           .from('reports')
           .select('*')
-          // .eq('status', 'pending') // Temporarily show ALL reports for debugging
+          .eq('status', 'pending') // Only show pending reports so markers match Nearby issues
           .order('created_at', { ascending: false })
           .limit(50); // Fetch more than Home (5) to populate the map well
 
         if (data) {
-          const validMarkers = data
-            .filter(r => r.latitude && r.longitude)
-            .map((report) => ({
-              id: report.id,
-              lat: parseFloat(report.latitude),
-              lng: parseFloat(report.longitude),
-              type: report.category,
-              severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-              title: report.title,
-              originalData: report
-            }));
-          setMarkers(validMarkers);
+          const prepared: any[] = [];
+
+          // First pass: use reports that already have coordinates
+          for (const report of data) {
+            if (report.latitude && report.longitude) {
+              prepared.push({
+                id: report.id,
+                lat: parseFloat(report.latitude),
+                lng: parseFloat(report.longitude),
+                type: report.category,
+                severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
+                title: report.title,
+                originalData: report
+              });
+            }
+          }
+
+          // For reports without coords, attempt geocoding for a limited number to avoid rate limits
+          const toGeocode = data.filter(r => !(r.latitude && r.longitude)).slice(0, 10);
+          for (const report of toGeocode) {
+            const locName = report.location_name || report.location || '';
+            const geo = await geocodeLocation(locName);
+            if (geo) {
+              prepared.push({
+                id: report.id,
+                lat: geo.lat,
+                lng: geo.lon,
+                type: report.category,
+                severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
+                title: report.title + (locName ? ` — ${locName}` : ''),
+                originalData: report
+              });
+            }
+          }
+
+          setMarkers(prepared);
         }
       } catch (error) {
         console.error("Error fetching map reports:", error);
@@ -124,11 +178,11 @@ const MapView = () => {
               icon={getSeverityIcon(marker.severity)}
               eventHandlers={{
                 click: () => {
-                  setSelectedIssue(marker);
+                  // Navigate directly to the report details when a marker is clicked
+                  navigate(`/report-details/${marker.id}`);
                 },
               }}
-            >
-            </Marker>
+            />
           ))}
 
         </MapContainer>
