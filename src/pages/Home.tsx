@@ -12,6 +12,7 @@ const Home = () => {
   const navigate = useNavigate();
   const { user } = useUser();
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [lastLocation, setLastLocation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [nearbyIssues, setNearbyIssues] = useState<any[]>([]);
@@ -89,8 +90,24 @@ const Home = () => {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // Coordinates for Anna Nagar, Chennai
-        const data = await getWeather(13.0850, 80.2101);
+        // Use last saved location if available
+        let lat = 13.0850;
+        let lng = 80.2101;
+        try {
+          const raw = localStorage.getItem('lastLocation');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.lat && parsed.lng) {
+              lat = parsed.lat;
+              lng = parsed.lng;
+              setLastLocation(parsed.address || null);
+            }
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+
+        const data = await getWeather(lat, lng);
         if (data) {
           setWeather(data);
         } else {
@@ -132,7 +149,7 @@ const Home = () => {
           </div>
           <div className="flex items-center gap-2 text-primary-foreground/80">
             <MapPin size={16} />
-            <span className="text-sm">{weather ? weather.location : "Anna Nagar, Chennai"}</span>
+            <span className="text-sm">{weather ? weather.location : (lastLocation || "Anna Nagar, Chennai")}</span>
           </div>
         </div>
 

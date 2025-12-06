@@ -67,11 +67,26 @@ const ChooseLocation = () => {
         lat: lat,
         lng: lng,
       });
+      // Save as last known location for other parts of the app
+      try {
+        localStorage.setItem(
+          'lastLocation',
+          JSON.stringify({ address: data.display_name || 'Unknown Location', lat, lng })
+        );
+      } catch (e) {
+        // Ignore storage errors
+      }
       toast.success("Location updated");
     } catch (error) {
       console.error("Error fetching address:", error);
       // Still update coordinates
       setLocation(prev => ({ ...prev, lat, lng, address: "Selected Location" }));
+      try {
+        localStorage.setItem(
+          'lastLocation',
+          JSON.stringify({ address: 'Selected Location', lat, lng })
+        );
+      } catch (e) {}
     } finally {
       setIsLoading(false);
     }
@@ -131,6 +146,10 @@ const ChooseLocation = () => {
   };
 
   const handleConfirm = () => {
+    // Persist chosen location and return to report form
+    try {
+      localStorage.setItem('lastLocation', JSON.stringify({ address: location.address, lat: location.lat, lng: location.lng }));
+    } catch (e) {}
     navigate("/report", {
       state: {
         ...previousFormData,

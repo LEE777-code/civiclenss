@@ -5,9 +5,10 @@ import { useSwipeable } from "react-swipeable";
 interface SwipeWrapperProps {
     children: ReactNode;
     className?: string;
+    swipeDisabled?: boolean;
 }
 
-const SwipeWrapper = ({ children, className = "" }: SwipeWrapperProps) => {
+const SwipeWrapper = ({ children, className = "", swipeDisabled = false }: SwipeWrapperProps) => {
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -21,24 +22,27 @@ const SwipeWrapper = ({ children, className = "" }: SwipeWrapperProps) => {
 
     const currentIndex = screens.indexOf(location.pathname);
 
-    const handlers = useSwipeable({
-        onSwipedLeft: () => {
-            if (currentIndex !== -1 && currentIndex < screens.length - 1) {
-                navigate(screens[currentIndex + 1]);
-            }
-        },
-        onSwipedRight: () => {
-            if (currentIndex !== -1 && currentIndex > 0) {
-                navigate(screens[currentIndex - 1]);
-            }
-        },
-        trackMouse: true,
-        preventScrollOnSwipe: true,
-        delta: 50, // Min swipe distance in px
-    });
+    const handlers = swipeDisabled
+        ? {}
+        : useSwipeable({
+              onSwipedLeft: () => {
+                  if (currentIndex !== -1 && currentIndex < screens.length - 1) {
+                      navigate(screens[currentIndex + 1]);
+                  }
+              },
+              onSwipedRight: () => {
+                  if (currentIndex !== -1 && currentIndex > 0) {
+                      navigate(screens[currentIndex - 1]);
+                  }
+              },
+              trackMouse: true,
+              preventScrollOnSwipe: true,
+              delta: 50, // Min swipe distance in px
+          });
 
+    // If swipe is disabled we should not spread handlers to avoid capturing touch gestures
     return (
-        <div {...handlers} className={`min-h-screen touch-pan-y ${className}`}>
+        <div {...(swipeDisabled ? {} : handlers)} className={`min-h-screen touch-pan-y ${className}`}>
             {children}
         </div>
     );

@@ -4,6 +4,7 @@ import { ArrowLeft, Camera, MapPin, Eye } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
+import { generateImageDescription } from "@/services/hfService";
 
 const ReportIssue = () => {
   const navigate = useNavigate();
@@ -17,11 +18,14 @@ const ReportIssue = () => {
     anonymous: false,
   });
   const [selectedImage, setSelectedImage] = useState<string | null>(location.state?.image || null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [showImageOptions, setShowImageOptions] = useState(false);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setSelectedImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result as string);
@@ -105,6 +109,57 @@ const ReportIssue = () => {
 
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">Description</label>
+              <div className="flex items-center justify-between">
+                <label className="sr-only">Description</label>
+                <button
+                  onClick={async () => {
+                    if (!formData.title?.trim()) {
+                      toast.error("Provide a title first to generate a description");
+                      return;
+                    }
+
+                    setGenerating(true);
+                    try {
+                      // Prefer using the uploaded File if available (keeps original binary)
+                      let fileToSend: File | null = selectedImageFile;
+
+                      // If no File but we have a data URL preview, convert it to a File
+                      if (!fileToSend && selectedImage) {
+                        try {
+                          fileToSend = dataURLToFile(selectedImage, `${formData.title.replace(/\s+/g, '_') || 'image'}.jpg`);
+                        } catch (e) {
+                          console.warn('Failed to convert dataURL to File', e);
+                        }
+                      }
+
+                      if (fileToSend) {
+                        const desc = await generateImageDescription(fileToSend);
+                        if (desc) {
+                          setFormData({ ...formData, description: desc });
+                          toast.success("Description generated");
+                        } else {
+                          toast.error("Failed to generate description");
+                        }
+                      } else {
+                        // No image available — fall back to a simple heuristic using title
+                        const fallback = `${formData.title.trim()} — Please provide more details (location, visible markers, nearby landmarks).`;
+                        setFormData({ ...formData, description: fallback });
+                        toast.success("Description filled from title");
+                      }
+                    } catch (e) {
+                      console.error(e);
+                      const msg = (e as any)?.message || 'Error generating description';
+                      toast.error(msg);
+                    } finally {
+                      setGenerating(false);
+                    }
+                  }}
+                  className="text-sm text-primary font-medium ml-auto"
+                  disabled={generating}
+                >
+                  {generating ? "Generating..." : "Generate description"}
+                </button>
+              </div>
               <textarea
                 placeholder="Provide a detailed description of the issue."
                 value={formData.description}
@@ -249,3 +304,17 @@ const ReportIssue = () => {
 };
 
 export default ReportIssue;
+
+// Utility: convert dataURL (base64) to a File object
+function dataURLToFile(dataUrl: string, filename: string) {
+  const arr = dataUrl.split(',');
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+}

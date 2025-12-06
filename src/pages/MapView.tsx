@@ -154,7 +154,7 @@ const MapView = () => {
   }, [markers]);
 
   return (
-    <SwipeWrapper className="mobile-container h-screen flex flex-col bg-background pb-20">
+    <SwipeWrapper swipeDisabled={true} className="mobile-container h-screen flex flex-col bg-background pb-20">
       {/* Map Area */}
       <div className="relative flex-1 w-full z-0">
         <MapContainer
