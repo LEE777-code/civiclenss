@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Search, Filter, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,16 +18,20 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Issue } from "@/lib/supabase";
+import { Report } from "@/services/reportService";
 import { issueService } from "@/services/issueService";
+import { reportService } from "@/services/reportService";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface IssuesTableProps {
-  issues: Issue[];
+  issues: Issue[] | Report[];
   compact?: boolean;
 }
 
 const statusStyles = {
   open: "status-open",
+  pending: "status-open", // Maps pending to open style
   "in-progress": "status-progress",
   resolved: "status-resolved",
   rejected: "bg-muted text-muted-foreground",
@@ -34,6 +39,7 @@ const statusStyles = {
 
 const statusLabels = {
   open: "Open",
+  pending: "Pending", // Added pending label
   "in-progress": "In Progress",
   resolved: "Resolved",
   rejected: "Rejected",
@@ -45,38 +51,86 @@ const priorityStyles = {
   high: "bg-destructive/10 text-destructive",
 };
 
+// Helper functions to handle both Issue and Report types
+const getLocation = (issue: Issue | Report): string => {
+  return 'location' in issue ? issue.location : issue.location_name || '';
+};
+
+const getPriority = (issue: Issue | Report): 'low' | 'medium' | 'high' => {
+  return 'priority' in issue ? issue.priority : issue.severity;
+};
+
+const isReport = (issue: Issue | Report): issue is Report => {
+  return 'severity' in issue;
+};
+
 export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
+  const { adminEmail } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
-  const handleStatusUpdate = async (issueId: string, newStatus: Issue['status']) => {
-    const success = await issueService.updateIssueStatus(issueId, newStatus);
-    if (success) {
-      toast.success("Issue status updated successfully");
-      window.location.reload();
-    } else {
-      toast.error("Failed to update issue status");
+  const handleStatusUpdate = async (issue: Issue | Report, newStatus: string) => {
+    try {
+      let success = false;
+      if (isReport(issue)) {
+        // It's a Report type - pass admin email when resolving
+        success = await reportService.updateReportStatus(
+          issue.id,
+          newStatus as Report['status'],
+          adminEmail
+        );
+      } else {
+        // It's an Issue type
+        success = await issueService.updateIssueStatus(issue.id, newStatus as Issue['status']);
+      }
+
+      if (success) {
+        toast.success("Status updated successfully");
+        // Don't reload, let realtime subscription handle the update
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error("An error occurred");
     }
   };
 
-  const handleDelete = async (issueId: string) => {
-    if (confirm("Are you sure you want to delete this issue?")) {
-      const success = await issueService.deleteIssue(issueId);
-      if (success) {
-        toast.success("Issue deleted successfully");
-        window.location.reload();
-      } else {
-        toast.error("Failed to delete issue");
+  const handleDelete = async (issue: Issue | Report) => {
+    if (confirm("Are you sure you want to delete this report?")) {
+      try {
+        let success = false;
+        if (isReport(issue)) {
+          success = await reportService.deleteReport(issue.id);
+        } else {
+          success = await issueService.deleteIssue(issue.id);
+        }
+
+        if (success) {
+          toast.success("Deleted successfully");
+          // Don't reload, let realtime subscription handle the update
+        } else {
+          toast.error("Failed to delete");
+        }
+      } catch (error) {
+        console.error('Error deleting:', error);
+        toast.error("An error occurred");
       }
     }
+  };
+
+  const handleViewDetails = (issue: Issue | Report) => {
+    // Navigate to report details page
+    navigate(`/admin/issues/${issue.id}`);
   };
 
   const filteredIssues = issues.filter((issue) => {
     const matchesSearch =
       issue.title.toLowerCase().includes(search.toLowerCase()) ||
       issue.id.toLowerCase().includes(search.toLowerCase()) ||
-      issue.location.toLowerCase().includes(search.toLowerCase());
+      getLocation(issue).toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || issue.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || issue.category === categoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
@@ -196,14 +250,14 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-                          priorityStyles[issue.priority]
+                          priorityStyles[getPriority(issue)]
                         )}
                       >
-                        {issue.priority}
+                        {getPriority(issue)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
-                      <div className="max-w-xs truncate">{issue.location}</div>
+                      <div className="max-w-xs truncate">{getLocation(issue)}</div>
                     </td>
                   </>
                 )}
@@ -218,27 +272,30 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-popover">
-                      <DropdownMenuItem className="cursor-pointer">
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => handleViewDetails(issue)}
+                      >
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         className="cursor-pointer"
-                        onClick={() => handleStatusUpdate(issue.id, 'in-progress')}
+                        onClick={() => handleStatusUpdate(issue, 'in-progress')}
                       >
                         <Edit className="mr-2 h-4 w-4" />
                         Mark In Progress
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         className="cursor-pointer"
-                        onClick={() => handleStatusUpdate(issue.id, 'resolved')}
+                        onClick={() => handleStatusUpdate(issue, 'resolved')}
                       >
                         <Edit className="mr-2 h-4 w-4" />
                         Mark Resolved
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         className="cursor-pointer text-destructive"
-                        onClick={() => handleDelete(issue.id)}
+                        onClick={() => handleDelete(issue)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete

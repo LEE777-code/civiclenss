@@ -3,33 +3,56 @@ import { FileText, AlertTriangle, Clock, CheckCircle2, Loader2 } from "lucide-re
 import { StatCard } from "@/components/dashboard/StatCard";
 import { IssuesTable } from "@/components/dashboard/IssuesTable";
 import { IssueSummaryPanel } from "@/components/dashboard/IssueSummaryPanel";
-import { Issue } from "@/lib/supabase";
-import { issueService, IssueStats } from "@/services/issueService";
+import { Report, reportService, ReportStats } from "@/services/reportService";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   const { admin } = useAuth();
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [stats, setStats] = useState<IssueStats | null>(null);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [stats, setStats] = useState<ReportStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [issuesData, statsData] = await Promise.all([
-          issueService.getRecentIssues(10),
-          issueService.getIssueStats(),
-        ]);
-        setIssues(issuesData);
-        setStats(statsData);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchData = async () => {
+    try {
+      const [reportsData, statsData] = await Promise.all([
+        reportService.getRecentReports(10),
+        reportService.getReportStats(),
+      ]);
+      setReports(reportsData);
+      setStats(statsData);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('dashboard-reports')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'reports'
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          // Refetch data when any change occurs
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   if (loading) {
@@ -40,7 +63,7 @@ export default function Dashboard() {
     );
   }
 
-  const selectedIssue = issues[0];
+  const selectedReport = reports[0];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -50,27 +73,21 @@ export default function Dashboard() {
           Welcome back, {admin?.name || "Admin"}
         </h1>
         <p className="text-muted-foreground">
-          You are managing issues for <span className="font-medium text-primary">{admin?.state || "your jurisdiction"}</span>
+          You are managing reports for <span className="font-medium text-primary">{admin?.state || "your jurisdiction"}</span>
         </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Issues"
+          title="Total Reports"
           value={stats?.total || 0}
           icon={FileText}
           variant="primary"
         />
         <StatCard
-          title="Open Issues"
-          value={stats?.open || 0}
-          icon={AlertTriangle}
-          variant="destructive"
-        />
-        <StatCard
-          title="In Progress"
-          value={stats?.inProgress || 0}
+          title="Pending"
+          value={stats?.pending || 0}
           icon={Clock}
           variant="warning"
         />
@@ -80,22 +97,29 @@ export default function Dashboard() {
           icon={CheckCircle2}
           variant="success"
         />
+        <StatCard
+          title="Rejected"
+          value={stats?.rejected || 0}
+          icon={AlertTriangle}
+          variant="destructive"
+        />
       </div>
 
       {/* Main Content */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Issues Table */}
+        {/* Reports Table */}
         <div className="lg:col-span-2">
-          <IssuesTable issues={issues} compact />
+          <IssuesTable issues={reports} compact />
         </div>
 
-        {/* Issue Summary Panel */}
-        {selectedIssue && (
+        {/* Report Summary Panel */}
+        {selectedReport && (
           <div className="lg:col-span-1">
-            <IssueSummaryPanel issue={selectedIssue} />
+            <IssueSummaryPanel issue={selectedReport} />
           </div>
         )}
       </div>
     </div>
   );
 }
+

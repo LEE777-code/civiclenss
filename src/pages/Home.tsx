@@ -17,49 +17,73 @@ const Home = () => {
   const [nearbyIssues, setNearbyIssues] = useState<any[]>([]);
   const [reportCounts, setReportCounts] = useState({ pending: 0, resolved: 0 });
 
-  useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        // Fetch nearby issues
-        const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5);
+  const fetchReports = async () => {
+    try {
+      // Fetch nearby issues - Only show pending reports (not resolved/rejected)
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('status', 'pending')  // Only show pending reports
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-        if (data) {
-          setNearbyIssues(data.map(report => ({
-            id: report.id,
-            title: report.title,
-            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-            location: report.location_name || "Unknown Location",
-            distance: "0.5 mi away", // Placeholder for now
-            icon: report.category === 'Streetlight / Electricity' ? Lightbulb : AlertTriangle, // Simple logic for icon
-          })));
-        }
-
-        // Fetch counts
-        const { count: pendingCount } = await supabase
-          .from('reports')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending');
-
-        const { count: resolvedCount } = await supabase
-          .from('reports')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'resolved');
-
-        setReportCounts({
-          pending: pendingCount || 0,
-          resolved: resolvedCount || 0
-        });
-
-      } catch (error) {
-        console.error("Error fetching reports:", error);
+      if (data) {
+        setNearbyIssues(data.map(report => ({
+          id: report.id,
+          title: report.title,
+          severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+          location: report.location_name || "Unknown Location",
+          distance: "0.5 mi away", // Placeholder for now
+          icon: report.category === 'Streetlight / Electricity' ? Lightbulb : AlertTriangle, // Simple logic for icon
+        })));
       }
-    };
 
+      // Fetch counts
+      const { count: pendingCount } = await supabase
+        .from('reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      const { count: resolvedCount } = await supabase
+        .from('reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'resolved');
+
+      setReportCounts({
+        pending: pendingCount || 0,
+        resolved: resolvedCount || 0
+      });
+
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+    }
+  };
+
+  useEffect(() => {
     fetchReports();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('home-reports')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'reports'
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          // Refetch data when any change occurs
+          fetchReports();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -183,33 +207,39 @@ const Home = () => {
               issue.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
               issue.severity.toLowerCase().includes(searchQuery.toLowerCase())
             )
-            .map((issue) => (
-              <button
-                key={issue.id}
-                onClick={() => navigate(`/report-details/${issue.id}`)}
-                className="card-elevated w-full flex items-center gap-4"
-              >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${issue.severity === "High" ? "bg-red-100" : "bg-amber-100"
-                  }`}>
-                  <issue.icon size={24} className={
-                    issue.severity === "High" ? "text-red-500" : "text-amber-500"
-                  } />
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-semibold text-foreground text-sm">{issue.title}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${issue.severity === "High" ? "severity-high" : "severity-medium"
-                      }`}>
-                      {issue.severity}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {issue.location} · {issue.distance}
-                    </span>
+            .map((issue) => {
+              // Dynamic severity colors
+              const severityStyles = {
+                High: { bg: 'bg-red-100', text: 'text-red-500', badge: 'severity-high' },
+                Medium: { bg: 'bg-amber-100', text: 'text-amber-500', badge: 'severity-medium' },
+                Low: { bg: 'bg-green-100', text: 'text-green-500', badge: 'severity-low' }
+              };
+              const style = severityStyles[issue.severity as keyof typeof severityStyles] || severityStyles.Medium;
+
+              return (
+                <button
+                  key={issue.id}
+                  onClick={() => navigate(`/report-details/${issue.id}`)}
+                  className="card-elevated w-full flex items-center gap-4"
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${style.bg}`}>
+                    <issue.icon size={24} className={style.text} />
                   </div>
-                </div>
-                <ChevronRight size={20} className="text-muted-foreground" />
-              </button>
-            ))}
+                  <div className="flex-1 text-left">
+                    <h3 className="font-semibold text-foreground text-sm">{issue.title}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${style.badge}`}>
+                        {issue.severity}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {issue.location} · {issue.distance}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} className="text-muted-foreground" />
+                </button>
+              );
+            })}
           {nearbyIssues.filter(issue =>
             issue.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             issue.severity.toLowerCase().includes(searchQuery.toLowerCase())

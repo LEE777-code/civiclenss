@@ -1,47 +1,55 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useUser } from '@clerk/clerk-react';
-import { Admin } from '@/lib/supabase';
-import { authService } from '@/services/authService';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface AuthContextType {
-  admin: Admin | null;
-  loading: boolean;
-  refreshAdmin: () => Promise<void>;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => boolean;
+  logout: () => void;
+  adminEmail: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Admin credentials - Change these to your desired username/password
+const ADMIN_CREDENTIALS = {
+  username: 'admin',
+  password: 'admin123', // CHANGE THIS PASSWORD!
+  email: 'admin123@gmail.com'
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { user, isLoaded } = useUser();
-  const [admin, setAdmin] = useState<Admin | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
 
-  const fetchAdmin = async () => {
-    if (!user?.id) {
-      setAdmin(null);
-      setLoading(false);
-      return;
+  // Check if user is already logged in (from localStorage)
+  useEffect(() => {
+    const authToken = localStorage.getItem('admin_auth');
+    if (authToken === 'authenticated') {
+      setIsAuthenticated(true);
+      setAdminEmail(ADMIN_CREDENTIALS.email);
     }
+  }, []);
 
-    try {
-      const adminData = await authService.getAdminByClerkId(user.id);
-      setAdmin(adminData);
-    } catch (error) {
-      console.error('Error fetching admin:', error);
-      setAdmin(null);
-    } finally {
-      setLoading(false);
+  const login = (username: string, password: string): boolean => {
+    if (
+      username === ADMIN_CREDENTIALS.username &&
+      password === ADMIN_CREDENTIALS.password
+    ) {
+      setIsAuthenticated(true);
+      setAdminEmail(ADMIN_CREDENTIALS.email);
+      localStorage.setItem('admin_auth', 'authenticated');
+      return true;
     }
+    return false;
   };
 
-  useEffect(() => {
-    if (isLoaded) {
-      fetchAdmin();
-    }
-  }, [user?.id, isLoaded]);
+  const logout = () => {
+    setIsAuthenticated(false);
+    setAdminEmail('');
+    localStorage.removeItem('admin_auth');
+  };
 
   return (
-    <AuthContext.Provider value={{ admin, loading, refreshAdmin: fetchAdmin }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, adminEmail }}>
       {children}
     </AuthContext.Provider>
   );

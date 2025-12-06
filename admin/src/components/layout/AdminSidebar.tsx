@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
@@ -28,6 +29,13 @@ const menuItems = [
 export function AdminSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/auth/signin");
+  };
 
   return (
     <aside
@@ -45,7 +53,7 @@ export function AdminSidebar() {
             </div>
             {!collapsed && (
               <div className="animate-fade-in">
-            <h1 className="text-sm font-bold text-sidebar-foreground">CivicLens</h1>
+                <h1 className="text-sm font-bold text-sidebar-foreground">CivicLens</h1>
                 <p className="text-xs text-sidebar-foreground/60">Admin Portal</p>
               </div>
             )}
@@ -80,13 +88,13 @@ export function AdminSidebar() {
 
         {/* Logout */}
         <div className="border-t border-sidebar-border p-3">
-          <NavLink
-            to="/auth/signin"
-            className="sidebar-item text-destructive/80 hover:text-destructive hover:bg-destructive/10"
+          <button
+            onClick={handleLogout}
+            className="sidebar-item text-destructive/80 hover:text-destructive hover:bg-destructive/10 w-full"
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
             {!collapsed && <span className="animate-fade-in">Sign Out</span>}
-          </NavLink>
+          </button>
         </div>
       </div>
     </aside>

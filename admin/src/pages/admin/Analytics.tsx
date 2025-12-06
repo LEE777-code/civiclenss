@@ -16,26 +16,25 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { issueService, IssueStats } from "@/services/issueService";
-import { Issue } from "@/lib/supabase";
+import { reportService, ReportStats, Report } from "@/services/reportService";
 import { Loader2 } from "lucide-react";
 
 const COLORS = ["#0D9488", "#10B981", "#F59E0B", "#EF4444", "#3B82F6", "#8B5CF6"];
 
 export default function Analytics() {
-  const [stats, setStats] = useState<IssueStats | null>(null);
-  const [issues, setIssues] = useState<Issue[]>([]);
+  const [stats, setStats] = useState<ReportStats | null>(null);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const [statsData, issuesData] = await Promise.all([
-          issueService.getIssueStats(),
-          issueService.getIssues(),
+        const [statsData, reportsData] = await Promise.all([
+          reportService.getReportStats(),
+          reportService.getReports(),
         ]);
         setStats(statsData);
-        setIssues(issuesData);
+        setReports(reportsData);
       } catch (error) {
         console.error("Error fetching analytics:", error);
       } finally {
@@ -59,19 +58,19 @@ export default function Analytics() {
     ? Object.entries(stats.byCategory).map(([name, value]) => ({ name, value }))
     : [];
 
-  // Generate monthly trend from issues
-  const monthlyTrend = issues.reduce((acc: { month: string; reported: number; resolved: number }[], issue: Issue) => {
-    const month = new Date(issue.created_at).toLocaleDateString("en-US", { month: "short" });
+  // Generate monthly trend from reports
+  const monthlyTrend = reports.reduce((acc: { month: string; reported: number; resolved: number }[], report: Report) => {
+    const month = new Date(report.created_at).toLocaleDateString("en-US", { month: "short" });
     const existing = acc.find((item) => item.month === month);
 
     if (existing) {
       existing.reported += 1;
-      if (issue.status === "resolved") existing.resolved += 1;
+      if (report.status === "resolved") existing.resolved += 1;
     } else {
       acc.push({
         month,
         reported: 1,
-        resolved: issue.status === "resolved" ? 1 : 0,
+        resolved: report.status === "resolved" ? 1 : 0,
       });
     }
 

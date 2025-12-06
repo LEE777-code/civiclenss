@@ -2,13 +2,15 @@ import { MapPin, Calendar, User, ThumbsUp, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Issue } from "@/lib/supabase";
+import { Report } from "@/services/reportService";
 
 interface IssueSummaryPanelProps {
-  issue: Issue;
+  issue: Issue | Report;
 }
 
 const statusStyles = {
   open: "bg-destructive text-destructive-foreground",
+  pending: "bg-destructive text-destructive-foreground", // Map pending to same as open
   "in-progress": "bg-warning text-warning-foreground",
   resolved: "bg-success text-success-foreground",
   rejected: "bg-muted text-muted-foreground",
@@ -16,9 +18,30 @@ const statusStyles = {
 
 const statusLabels = {
   open: "Open",
+  pending: "Pending",
   "in-progress": "In Progress",
   resolved: "Resolved",
   rejected: "Rejected",
+};
+
+// Helper functions
+const getLocation = (issue: Issue | Report): string => {
+  return 'location' in issue ? issue.location : issue.location_name || '';
+};
+
+const isReport = (issue: Issue | Report): issue is Report => {
+  return 'severity' in issue;
+};
+
+const isAnonymous = (issue: Issue | Report): boolean => {
+  return 'is_anonymous' in issue ? issue.is_anonymous : false;
+};
+
+const getReporterName = (issue: Issue | Report): string => {
+  if ('reporter_name' in issue) {
+    return issue.reporter_name || 'Unknown';
+  }
+  return 'Unknown';
 };
 
 export function IssueSummaryPanel({ issue }: IssueSummaryPanelProps) {
@@ -44,7 +67,7 @@ export function IssueSummaryPanel({ issue }: IssueSummaryPanelProps) {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="h-4 w-4 text-muted-foreground" />
-          <span className="text-foreground">{issue.location}</span>
+          <span className="text-foreground">{getLocation(issue)}</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <Tag className="h-4 w-4 text-muted-foreground" />
@@ -53,7 +76,7 @@ export function IssueSummaryPanel({ issue }: IssueSummaryPanelProps) {
         <div className="flex items-center gap-2 text-sm">
           <User className="h-4 w-4 text-muted-foreground" />
           <span className="text-foreground">
-            {issue.is_anonymous ? "Anonymous" : (issue.reporter_name || "Unknown")}
+            {isAnonymous(issue) ? "Anonymous" : getReporterName(issue)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-sm">

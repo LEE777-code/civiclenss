@@ -18,37 +18,63 @@ const MyReports = () => {
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
 
-  useEffect(() => {
+  const fetchMyReports = async () => {
     if (!user) return;
 
-    const fetchMyReports = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-        if (data) {
-          setReports(data.map(report => ({
-            id: report.id,
-            title: report.title,
-            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
-            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-            category: report.category,
-            location: report.location_name || "Unknown Location",
-            date: new Date(report.created_at).toLocaleDateString(),
-            icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
-              report.category === 'Garbage & Cleanliness' ? Trash2 :
-                report.category === 'Road Issues' ? AlertTriangle : Paintbrush, // Simple icon logic
-          })));
-        }
-      } catch (error) {
-        console.error("Error fetching my reports:", error);
+      if (data) {
+        setReports(data.map(report => ({
+          id: report.id,
+          title: report.title,
+          status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+          severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+          category: report.category,
+          location: report.location_name || "Unknown Location",
+          date: new Date(report.created_at).toLocaleDateString(),
+          icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
+            report.category === 'Garbage & Cleanliness' ? Trash2 :
+              report.category === 'Road Issues' ? AlertTriangle : Paintbrush, // Simple icon logic
+        })));
       }
-    };
+    } catch (error) {
+      console.error("Error fetching my reports:", error);
+    }
+  };
 
+  useEffect(() => {
     fetchMyReports();
+
+    if (!user) return;
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel('my-reports')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'reports',
+          filter: `user_id=eq.${user.id}` // Only listen to this user's reports
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          // Refetch data when any change occurs
+          fetchMyReports();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const getStatusStyle = (status: string) => {

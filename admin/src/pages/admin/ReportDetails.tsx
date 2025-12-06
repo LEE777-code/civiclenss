@@ -1,0 +1,350 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, MapPin, Calendar, User, Tag, AlertCircle, CheckCircle2, XCircle, Clock, Loader2, Eye } from "lucide-react";
+import { reportService, Report } from "@/services/reportService";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
+
+export default function ReportDetailsPage() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const { adminEmail } = useAuth();
+    const [report, setReport] = useState<Report | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [updating, setUpdating] = useState(false);
+
+    const fetchReport = async () => {
+        if (!id) return;
+
+        try {
+            const data = await reportService.getReportById(id);
+            if (data) {
+                setReport(data);
+                // Mark as viewed by admin
+                await reportService.markAsViewedByAdmin(id);
+            } else {
+                toast.error("Report not found");
+                navigate("/admin/issues");
+            }
+        } catch (error) {
+            console.error("Error fetching report:", error);
+            toast.error("Failed to load report");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchReport();
+
+        if (!id) return;
+
+        // Set up real-time subscription
+        const channel = supabase
+            .channel(`admin-report-${id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'reports',
+                    filter: `id=eq.${id}`
+                },
+                () => {
+                    fetchReport();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [id]);
+
+    const handleUpdateStatus = async (newStatus: Report['status']) => {
+        if (!report) return;
+
+        setUpdating(true);
+        try {
+            const success = await reportService.updateReportStatus(report.id, newStatus, adminEmail);
+
+            if (success) {
+                toast.success(`Report marked as ${newStatus}`);
+                // The real-time subscription will update the UI
+            } else {
+                toast.error("Failed to update status");
+            }
+        } catch (error) {
+            console.error("Error updating status:", error);
+            toast.error("An error occurred");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdateSeverity = async (newSeverity: Report['severity']) => {
+        if (!report) return;
+
+        setUpdating(true);
+        try {
+            const success = await reportService.updateReportSeverity(report.id, newSeverity);
+
+            if (success) {
+                toast.success(`Severity updated to ${newSeverity}`);
+            } else {
+                toast.error("Failed to update severity");
+            }
+        } catch (error) {
+            console.error("Error updating severity:", error);
+            toast.error("An error occurred");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (!report) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Report not found</p>
+                <Button onClick={() => navigate("/admin/issues")} className="mt-4">
+                    Back to Reports
+                </Button>
+            </div>
+        );
+    }
+
+    const statusColors = {
+        pending: "bg-amber-500",
+        resolved: "bg-green-500",
+        rejected: "bg-red-500",
+    };
+
+    const severityColors = {
+        low: "text-green-600 bg-green-50",
+        medium: "text-amber-600 bg-amber-50",
+        high: "text-red-600 bg-red-50",
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/admin/issues")}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold text-foreground">Report Details</h1>
+                        <p className="text-sm text-muted-foreground">ID: {report.id}</p>
+                    </div>
+                </div>
+
+                {report.viewed_by_admin && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                        <Eye className="h-4 w-4" />
+                        <span>Viewed by Admin</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+                {/* Main Content */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Report Card */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <div className="flex items-start justify-between mb-4">
+                            <h2 className="text-xl font-semibold text-foreground">{report.title}</h2>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${statusColors[report.status]} text-white`}>
+                                {report.status}
+                            </span>
+                        </div>
+
+                        {report.description && (
+                            <p className="text-muted-foreground mb-4">{report.description}</p>
+                        )}
+
+                        {/* Image */}
+                        {report.image_url && (
+                            <div className="mb-4">
+                                <img
+                                    src={report.image_url}
+                                    alt="Report"
+                                    className="w-full h-64 object-cover rounded-lg border border-border"
+                                />
+                            </div>
+                        )}
+
+                        {/* Details Grid */}
+                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
+                            <div className="flex items-center gap-2">
+                                <Tag className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Category</p>
+                                    <p className="font-medium text-foreground">{report.category}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Severity</p>
+                                    <p className={`font-medium capitalize px-2 py-0.5 rounded ${severityColors[report.severity]}`}>
+                                        {report.severity}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Location</p>
+                                    <p className="font-medium text-foreground">{report.location_name}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Submitted</p>
+                                    <p className="font-medium text-foreground">
+                                        {new Date(report.created_at).toLocaleDateString()}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Reporter</p>
+                                    <p className="font-medium text-foreground">{report.user_id}</p>
+                                </div>
+                            </div>
+
+                            {report.resolved_at && (
+                                <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Resolved</p>
+                                        <p className="font-medium text-foreground">
+                                            {new Date(report.resolved_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {report.resolved_by && (
+                                <div className="flex items-center gap-2 col-span-2">
+                                    <User className="h-4 w-4 text-green-600" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Resolved By</p>
+                                        <p className="font-medium text-green-700">{report.resolved_by}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Actions Sidebar */}
+                <div className="space-y-6">
+                    {/* Status Actions */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h3 className="font-semibold text-foreground mb-4">Update Status</h3>
+                        <div className="space-y-2">
+                            <Button
+                                onClick={() => handleUpdateStatus('resolved')}
+                                disabled={updating || report.status === 'resolved'}
+                                variant={report.status === 'resolved' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                            >
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Mark as Resolved
+                            </Button>
+                            <Button
+                                onClick={() => handleUpdateStatus('rejected')}
+                                disabled={updating || report.status === 'rejected'}
+                                variant={report.status === 'rejected' ? 'destructive' : 'outline'}
+                                className="w-full justify-start"
+                            >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Mark as Rejected
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Severity Actions */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h3 className="font-semibold text-foreground mb-4">Update Severity</h3>
+                        <div className="space-y-2">
+                            <Button
+                                onClick={() => handleUpdateSeverity('low')}
+                                disabled={updating || report.severity === 'low'}
+                                variant={report.severity === 'low' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                            >
+                                <div className="h-2 w-2 rounded-full bg-green-500 mr-2" />
+                                Low Priority
+                            </Button>
+                            <Button
+                                onClick={() => handleUpdateSeverity('medium')}
+                                disabled={updating || report.severity === 'medium'}
+                                variant={report.severity === 'medium' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                            >
+                                <div className="h-2 w-2 rounded-full bg-amber-500 mr-2" />
+                                Medium Priority
+                            </Button>
+                            <Button
+                                onClick={() => handleUpdateSeverity('high')}
+                                disabled={updating || report.severity === 'high'}
+                                variant={report.severity === 'high' ? 'default' : 'outline'}
+                                className="w-full justify-start"
+                            >
+                                <div className="h-2 w-2 rounded-full bg-red-500 mr-2" />
+                                High Priority
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h3 className="font-semibold text-foreground mb-4">Statistics</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Upvotes</span>
+                                <span className="font-medium text-foreground">{report.upvotes || 0}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Created</span>
+                                <span className="font-medium text-foreground">
+                                    {new Date(report.created_at).toLocaleDateString()}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Last Updated</span>
+                                <span className="font-medium text-foreground">
+                                    {new Date(report.updated_at).toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
