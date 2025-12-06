@@ -4,10 +4,7 @@ import {
   LayoutDashboard,
   FileText,
   BarChart3,
-  FolderOpen,
   Users,
-  UserCircle,
-  Globe,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -20,10 +17,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
   { icon: FileText, label: "Issues", path: "/admin/issues" },
   { icon: BarChart3, label: "Analytics", path: "/admin/analytics" },
-  { icon: FolderOpen, label: "Categories", path: "/admin/categories" },
   { icon: Users, label: "Admins", path: "/admin/admins" },
-  { icon: UserCircle, label: "Profile", path: "/admin/profile" },
-  { icon: Globe, label: "Client View", path: "/client" },
 ];
 
 export function AdminSidebar() {

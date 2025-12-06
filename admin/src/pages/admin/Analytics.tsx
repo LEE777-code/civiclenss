@@ -58,24 +58,25 @@ export default function Analytics() {
     ? Object.entries(stats.byCategory).map(([name, value]) => ({ name, value }))
     : [];
 
-  // Generate monthly trend from reports
-  const monthlyTrend = reports.reduce((acc: { month: string; reported: number; resolved: number }[], report: Report) => {
-    const month = new Date(report.created_at).toLocaleDateString("en-US", { month: "short" });
-    const existing = acc.find((item) => item.month === month);
+
+  // Generate daily trend from reports (last 7 days)
+  const dailyTrend = reports.reduce((acc: { day: string; reported: number; resolved: number }[], report: Report) => {
+    const day = new Date(report.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const existing = acc.find((item) => item.day === day);
 
     if (existing) {
       existing.reported += 1;
       if (report.status === "resolved") existing.resolved += 1;
     } else {
       acc.push({
-        month,
+        day,
         reported: 1,
         resolved: report.status === "resolved" ? 1 : 0,
       });
     }
 
     return acc;
-  }, []).slice(-6);
+  }, []).slice(-7); // Last 7 days
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -87,13 +88,13 @@ export default function Analytics() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Monthly Trend Chart */}
+        {/* Daily Trend Chart */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Monthly Trend</h3>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Daily Trend (Last 7 Days)</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={monthlyTrend}>
+            <AreaChart data={dailyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+              <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" />
               <YAxis stroke="hsl(var(--muted-foreground))" />
               <Tooltip
                 contentStyle={{
@@ -157,9 +158,9 @@ export default function Analytics() {
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm lg:col-span-2">
           <h3 className="mb-4 text-lg font-semibold text-foreground">Reported vs Resolved</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthlyTrend}>
+            <BarChart data={dailyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+              <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" />
               <YAxis stroke="hsl(var(--muted-foreground))" />
               <Tooltip
                 contentStyle={{
