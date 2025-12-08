@@ -45,8 +45,7 @@ ${googleMapsLink}
 📝 *Description:*
 ${report.description || 'No description provided'}
 
-${report.image_url ? `🖼 *Image:*\n${report.image_url}\n` : ''}
-⚠️ *Please take immediate action.*
+${report.image_url ? `🖼 *Image:* Available in report\n` : ''}⚠️ *Please take immediate action.*
 
 _This is an automated message from CivicLens Admin Panel._
 `;
