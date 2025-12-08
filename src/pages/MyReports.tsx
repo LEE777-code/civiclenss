@@ -56,6 +56,7 @@ const MyReports = () => {
           image: report.image_url,
           description: report.description,
           createdAt: report.created_at,
+          upvotes: report.upvotes || 0,
           icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
             report.category === 'Garbage & Cleanliness' ? Trash2 :
               report.category === 'Road Issues' ? AlertTriangle : Paintbrush,

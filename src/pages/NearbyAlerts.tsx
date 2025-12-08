@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Filter, ArrowUpDown, Zap, Construction, Droplets, TreePine, Check, AlertTriangle, Lightbulb } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
+import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase";
 import { useEffect } from "react";
@@ -38,6 +39,7 @@ const NearbyAlerts = () => {
             iconColor: report.severity === 'high' ? "text-red-500" : "text-amber-500",
             severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
             status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            upvotes: report.upvotes || 0,
             type: "Issue"
           })));
         }
@@ -233,7 +235,7 @@ const NearbyAlerts = () => {
                 className="card-elevated animate-fade-in"
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
-                <div className="flex gap-4">
+                <div className="flex gap-4 mb-3">
                   <div className={`w-12 h-12 ${alert.color} rounded-xl flex items-center justify-center shrink-0`}>
                     <alert.icon size={24} className={alert.iconColor} />
                   </div>

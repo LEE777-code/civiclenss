@@ -1,14 +1,18 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, AlertTriangle, Check, Eye, MessageSquare, CheckCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, AlertTriangle, Check, Eye, MessageSquare, CheckCircle, ThumbsUp } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
+import { toggleUpvote, hasUserUpvoted } from "@/services/upvoteService";
+import { toast } from "sonner";
 
 const ReportDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [upvoting, setUpvoting] = useState(false);
+  const [hasUpvoted, setHasUpvoted] = useState(false);
 
   const fetchReport = async () => {
     if (!id) return;
@@ -30,6 +34,7 @@ const ReportDetails = () => {
           date: new Date(data.created_at).toLocaleString(),
           location: data.location_name || "Unknown Location",
           image: data.image_url || null, // Add the image URL
+          upvotes: data.upvotes || 0,
           viewedByAdmin: data.viewed_by_admin || false,
           adminViewedAt: data.admin_viewed_at ? new Date(data.admin_viewed_at).toLocaleString() : null,
           resolvedBy: data.resolved_by || null,
@@ -90,6 +95,38 @@ const ReportDetails = () => {
       supabase.removeChannel(channel);
     };
   }, [id]);
+
+  useEffect(() => {
+    // Check if user has already upvoted this report
+    if (id) {
+      setHasUpvoted(hasUserUpvoted(id));
+    }
+  }, [id]);
+
+  const handleUpvote = async () => {
+    if (!id || upvoting) return;
+
+    setUpvoting(true);
+    const { data, error, upvoted, upvotes } = await toggleUpvote(id);
+
+    if (error) {
+      toast.error("Failed to upvote. Please try again.");
+      console.error('Upvote error:', error);
+    } else {
+      if (upvoted) {
+        toast.success("Thanks for your upvote!");
+      } else {
+        toast.success("Upvote removed!");
+      }
+      // Update local state
+      setReport((prevReport: any) => ({
+        ...prevReport,
+        upvotes: upvotes
+      }));
+      setHasUpvoted(upvoted);
+    }
+    setUpvoting(false);
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -177,6 +214,18 @@ const ReportDetails = () => {
             <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
               {report.severity}
             </span>
+            <button
+              onClick={handleUpvote}
+              disabled={upvoting}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                hasUpvoted
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <ThumbsUp size={14} fill={hasUpvoted ? "currentColor" : "none"} />
+              {report.upvotes || 0}
+            </button>
           </div>
         </div>
 
