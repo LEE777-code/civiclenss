@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Camera, MapPin, Eye } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Eye, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
 import { generateImageDescription } from "@/services/hfService";
+
 
 const ReportIssue = () => {
   const navigate = useNavigate();
@@ -21,21 +22,50 @@ const ReportIssue = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
   const [showImageOptions, setShowImageOptions] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedImageFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+      reader.onloadend = async () => {
+        const imageData = reader.result as string;
+        setSelectedImage(imageData);
         setShowImageOptions(false);
+
+        // Auto-generate description using Gemini Vision API
+        setIsAnalyzing(true);
+        toast.info("🤖 Analyzing image with AI...", { duration: 2000 });
+
+        try {
+          // Run all AI analyses in parallel for faster results
+          const [description, title, category] = await Promise.all([
+            generateImageDescription(imageData),
+            generateImageTitle(imageData),
+            suggestCategory(imageData)
+          ]);
+
+          // Update form with AI-generated content
+          setFormData(prev => ({
+            ...prev,
+            description: description,
+            title: title,
+            category: category
+          }));
+
+          toast.success("✨ AI analysis complete! Review and edit as needed.", { duration: 3000 });
+        } catch (error) {
+          console.error("AI analysis error:", error);
+          toast.error("Failed to analyze image. You can still fill in details manually.", { duration: 4000 });
+        } finally {
+          setIsAnalyzing(false);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // AI description generation removed
 
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
@@ -96,6 +126,19 @@ const ReportIssue = () => {
           <h2 className="text-lg font-semibold text-foreground mb-3">Issue Details</h2>
 
           <div className="space-y-4">
+            {/* AI Analyzing Indicator */}
+            {isAnalyzing && (
+              <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
+                <div className="animate-pulse">
+                  <Sparkles className="text-primary" size={24} />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">AI is analyzing your image...</p>
+                  <p className="text-sm text-muted-foreground">This will auto-fill the details below</p>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">Issue Title</label>
               <input
@@ -104,6 +147,7 @@ const ReportIssue = () => {
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="input-field"
+                disabled={isAnalyzing}
               />
             </div>
 
@@ -165,6 +209,7 @@ const ReportIssue = () => {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="input-field min-h-[100px] resize-none"
+                disabled={isAnalyzing}
               />
             </div>
 
@@ -193,6 +238,7 @@ const ReportIssue = () => {
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="input-field"
+                disabled={isAnalyzing}
               >
                 <option value="">Select Category</option>
                 <option value="Road Issues">Road Issues</option>
@@ -213,6 +259,7 @@ const ReportIssue = () => {
                   <button
                     key={level}
                     onClick={() => setFormData({ ...formData, severity: level })}
+                    disabled={isAnalyzing}
                     className={`flex-1 py-3 rounded-xl font-medium transition-all ${formData.severity === level
                       ? level === "Low"
                         ? "bg-green-500 text-primary-foreground"
@@ -220,7 +267,7 @@ const ReportIssue = () => {
                           ? "bg-amber-500 text-primary-foreground"
                           : "bg-red-500 text-primary-foreground"
                       : "bg-muted text-muted-foreground"
-                      }`}
+                      } ${isAnalyzing ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     {level}
                   </button>
