@@ -16,6 +16,7 @@ export interface Report {
     created_at: string;
     updated_at: string;
     resolved_at?: string;
+    resolved_image_url?: string;
     viewed_by_admin?: boolean;
     admin_viewed_at?: string;
     resolved_by?: string;
@@ -101,8 +102,10 @@ export const reportService = {
         return data;
     },
 
-    // Update report status
-    async updateReportStatus(id: string, status: Report['status'], adminEmail?: string): Promise<boolean> {
+    // Resolve report function removed (reverted to client-side logic in component)
+
+    // Update report status (Client-side resolution with Base64 support)
+    async updateReportStatus(id: string, status: Report['status'], adminEmail?: string, resolvedImageUrl?: string): Promise<{ success: boolean; error?: any }> {
         const updateData: any = {
             status,
             updated_at: new Date().toISOString(),
@@ -113,6 +116,9 @@ export const reportService = {
             if (adminEmail) {
                 updateData.resolved_by = adminEmail;
             }
+            if (resolvedImageUrl) {
+                updateData.resolved_image_url = resolvedImageUrl;
+            }
         }
 
         const { error } = await supabase
@@ -122,10 +128,10 @@ export const reportService = {
 
         if (error) {
             console.error('Error updating report status:', error);
-            return false;
+            return { success: false, error: error };
         }
 
-        return true;
+        return { success: true };
     },
 
     // Mark report as viewed by admin

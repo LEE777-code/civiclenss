@@ -54,6 +54,7 @@ const MyReports = () => {
           location: report.location_name || "Unknown Location",
           date: new Date(report.created_at).toLocaleDateString(),
           image: report.image_url,
+          resolved_image_url: report.resolved_image_url,
           description: report.description,
           createdAt: report.created_at,
           upvotes: report.upvotes || 0,
@@ -117,9 +118,27 @@ const MyReports = () => {
 
     try {
       toast.info("Generating PDF...");
-      const pdfBytes = await generateReportPDF(report);
-      const filename = `Report_${report.id.substring(0, 8)}_${Date.now()}.pdf`;
-      downloadPDF(pdfBytes, filename);
+      // Reverted to client-side PDF generation
+      // We need to map the report object correctly to what generateReportPDF expects if there are differences
+      // But based on previous code, we can pass report directly or map it.
+      // Looking at pdfService, it expects ReportData.
+
+      const reportData = {
+        id: report.id,
+        title: report.title,
+        status: report.status,
+        severity: report.severity,
+        location: report.location,
+        description: report.description,
+        date: report.date,
+        createdAt: report.createdAt,
+        category: report.category,
+        image: report.image,
+        resolved_image_url: report.resolved_image_url
+      };
+
+      const pdfBlob = await generateReportPDF(reportData);
+      downloadPDF(pdfBlob, `CivicLens_Report_${report.id.substring(0, 8)}.pdf`);
       toast.success("PDF downloaded successfully!");
     } catch (error) {
       console.error("Error generating PDF:", error);

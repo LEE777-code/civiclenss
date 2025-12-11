@@ -165,10 +165,14 @@ const IssuePreview = () => {
 
         {/* Map / Location Card */}
         <div className="card-elevated">
-          <div className="h-36 bg-secondary/30 rounded-xl mb-4" />
+          <div className="h-36 bg-secondary/30 rounded-xl mb-4 text-center flex items-center justify-center text-muted-foreground">Map Preview</div>
           <h3 className="text-sm font-semibold text-foreground mb-2">Location</h3>
           <p className="text-foreground font-semibold">{formData.location}</p>
-          <p className="text-xs text-muted-foreground mt-1">40.7128° N, 74.0060° W</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {formData.latitude && formData.longitude
+              ? `${parseFloat(formData.latitude).toFixed(4)}° N, ${parseFloat(formData.longitude).toFixed(4)}° W`
+              : 'Coordinates not available'}
+          </p>
         </div>
 
         {/* Details */}

@@ -2,10 +2,20 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
+// Imports removed
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const app = express();
+
+// Supabase Configuration
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Multer Config
+// Multer Config removed
 
 // Configure nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -35,6 +45,8 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// --- Routes removed (Resolution & PDF) per user request to revert ---
 
 // Send email endpoint
 app.post('/api/send-email', async (req, res) => {
@@ -142,7 +154,7 @@ app.post('/api/send-report-assignment', async (req, res) => {
             text-decoration: none; 
             border-radius: 6px; 
             margin: 10px 5px 10px 0; 
-          }
+            }
           .button:hover { background: #5568d3; }
           .footer { 
             text-align: center; 
@@ -157,7 +169,7 @@ app.post('/api/send-report-assignment', async (req, res) => {
             padding: 15px; 
             margin: 20px 0; 
             border-radius: 4px; 
-          }
+            }
           @media only screen and (max-width: 600px) {
             .detail-row { flex-direction: column; }
             .detail-label { margin-bottom: 5px; }

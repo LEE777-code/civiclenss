@@ -1,160 +1,152 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const VISION_MODEL = import.meta.env.VITE_VISION_MODEL || "gemini-2.0-flash-exp";
 
 if (!API_KEY) {
-    console.error("VITE_GEMINI_API_KEY is not set in environment variables");
+    console.error("VITE_GEMINI_API_KEY is not set. Please adding it to your .env file.");
 }
 
-const genAI = new GoogleGenerativeAI(API_KEY);
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+// System Instruction from user snippet
+const SYSTEM_INSTRUCTION_DESC = `You are an assistant that analyzes civic infrastructure issues from images. Your job is to examine the image and produce a short, clear description of the visible problem for a public civic report.
+
+Follow these rules:
+1. Write only 1–2 sentences.
+2. Focus on the core civic issue (pothole, garbage overflow, drainage problem, broken streetlight, structural hazard, road damage, water stagnation, etc.).
+3. Avoid assumptions about location unless visually clear.
+4. Do not mention the camera, angle, or colors unless important to the issue.
+5. Keep the description simple enough for any citizen or municipal worker to understand.
+
+Output Format:
+Description: <your short description here>`;
 
 /**
- * Converts a base64 data URL to the format required by Gemini API
+ * Generate a description using Gemini with specific System Instructions
  */
-function base64ToGenerativePart(base64Data: string) {
-    // Extract the base64 data and mime type from data URL
-    const matches = base64Data.match(/^data:(.+);base64,(.+)$/);
-    if (!matches) {
-        throw new Error("Invalid base64 data URL");
-    }
-
-    return {
-        inlineData: {
-            mimeType: matches[1],
-            data: matches[2],
-        },
-    };
-}
-
-/**
- * Generate a description for a civic issue from an image using Gemini Vision API
- * @param imageData - Base64 encoded image data URL
- * @returns Generated description of the civic issue
- */
-export async function generateImageDescription(imageData: string): Promise<string> {
+export async function generateImageDescription(imageData: string | File): Promise<string> {
     try {
-        if (!API_KEY) {
-            throw new Error("Gemini API key is not configured");
+        let base64Content: string;
+        let mimeType: string = "image/jpeg";
+
+        if (imageData instanceof File) {
+            // Convert File to base64
+            const buffer = await imageData.arrayBuffer();
+            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+            mimeType = imageData.type;
+        } else {
+            // Handle data URL string
+            const split = imageData.split(',');
+            base64Content = split[1];
+            const mimeMatch = split[0].match(/:(.*?);/);
+            if (mimeMatch) mimeType = mimeMatch[1];
         }
 
-        const model = genAI.getGenerativeModel({ model: VISION_MODEL });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-preview-09-2025',
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            data: base64Content,
+                            mimeType: mimeType,
+                        },
+                    },
+                    {
+                        text: "Analyze this image for civic infrastructure issues."
+                    },
+                ],
+            },
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION_DESC,
+            },
+        });
 
-        const prompt = `Analyze this image of a civic issue and provide a detailed, objective description. 
-Focus on:
-1. The type of issue (e.g., pothole, garbage accumulation, broken streetlight, damaged infrastructure)
-2. The severity and condition
-3. Any safety concerns
-4. Notable environmental factors
-5. Approximate size or extent of the issue
+        const text = response.text || "No description generated";
+        return text.replace(/^Description:\s*/i, '').trim();
 
-Provide a clear, concise description in 2-3 sentences that would be useful for municipal authorities to understand and prioritize the issue.`;
-
-        const imagePart = base64ToGenerativePart(imageData);
-
-        const result = await model.generateContent([prompt, imagePart]);
-        const response = await result.response;
-        const text = response.text();
-
-        if (!text || text.trim().length === 0) {
-            throw new Error("No description generated");
-        }
-
-        return text.trim();
-    } catch (error) {
-        console.error("Error generating image description:", error);
-        throw error;
-    }
-}
-
-/**
- * Generate a title suggestion for a civic issue from an image
- * @param imageData - Base64 encoded image data URL
- * @returns Generated title suggestion
- */
-export async function generateImageTitle(imageData: string): Promise<string> {
-    try {
-        if (!API_KEY) {
-            throw new Error("Gemini API key is not configured");
-        }
-
-        const model = genAI.getGenerativeModel({ model: VISION_MODEL });
-
-        const prompt = `Analyze this image of a civic issue and suggest a brief, clear title (maximum 8 words).
-The title should:
-- Identify the type of issue (e.g., "Pothole", "Garbage Pile", "Broken Streetlight")
-- Include location context if visible (e.g., "on Main Road", "at Park Entrance")
-- Be concise and actionable
-
-Provide ONLY the title, nothing else.`;
-
-        const imagePart = base64ToGenerativePart(imageData);
-
-        const result = await model.generateContent([prompt, imagePart]);
-        const response = await result.response;
-        const text = response.text();
-
-        if (!text || text.trim().length === 0) {
-            throw new Error("No title generated");
-        }
-
-        return text.trim();
-    } catch (error) {
-        console.error("Error generating image title:", error);
-        throw error;
+    } catch (error: any) {
+        console.error("Gemini API Error (Description):", error);
+        throw new Error(error.message || "Failed to generate description");
     }
 }
 
 /**
- * Suggest a category for the civic issue based on the image
- * @param imageData - Base64 encoded image data URL
- * @returns Suggested category
+ * Generate a Title
  */
-export async function suggestCategory(imageData: string): Promise<string> {
+export async function generateImageTitle(imageData: string | File): Promise<string> {
     try {
-        if (!API_KEY) {
-            throw new Error("Gemini API key is not configured");
+        let base64Content: string;
+        let mimeType: string = "image/jpeg";
+
+        if (imageData instanceof File) {
+            const buffer = await imageData.arrayBuffer();
+            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+            mimeType = imageData.type;
+        } else {
+            const split = imageData.split(',');
+            base64Content = split[1];
+            const mimeMatch = split[0].match(/:(.*?);/);
+            if (mimeMatch) mimeType = mimeMatch[1];
         }
 
-        const model = genAI.getGenerativeModel({ model: VISION_MODEL });
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: {
+                parts: [
+                    { inlineData: { data: base64Content, mimeType: mimeType } },
+                    { text: "Suggest a brief, clear title (max 8 words) for this civic issue. Output ONLY the title." }
+                ]
+            }
+        });
 
-        const prompt = `Analyze this image of a civic issue and categorize it into ONE of these categories:
-- Road Issues
-- Garbage & Cleanliness
-- Water / Drainage
-- Streetlight / Electricity
-- Public Safety
-- Public Facilities
-- Parks & Environment
-- Other
-
-Respond with ONLY the category name, nothing else.`;
-
-        const imagePart = base64ToGenerativePart(imageData);
-
-        const result = await model.generateContent([prompt, imagePart]);
-        const response = await result.response;
-        const text = response.text().trim();
-
-        // Validate that the response is one of our categories
-        const validCategories = [
-            "Road Issues",
-            "Garbage & Cleanliness",
-            "Water / Drainage",
-            "Streetlight / Electricity",
-            "Public Safety",
-            "Public Facilities",
-            "Parks & Environment",
-            "Other"
-        ];
-
-        const matchedCategory = validCategories.find(cat =>
-            text.toLowerCase().includes(cat.toLowerCase())
-        );
-
-        return matchedCategory || "Other";
+        return response.text ? response.text.trim() : "Report Issue";
     } catch (error) {
-        console.error("Error suggesting category:", error);
+        console.error("Gemini API Error (Title):", error);
+        return "Report Issue";
+    }
+}
+
+/**
+ * Suggest a Category
+ */
+export async function suggestCategory(imageData: string | File): Promise<string> {
+    try {
+        let base64Content: string;
+        let mimeType: string = "image/jpeg";
+
+        if (imageData instanceof File) {
+            const buffer = await imageData.arrayBuffer();
+            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+            mimeType = imageData.type;
+        } else {
+            const split = imageData.split(',');
+            base64Content = split[1];
+            const mimeMatch = split[0].match(/:(.*?);/);
+            if (mimeMatch) mimeType = mimeMatch[1];
+        }
+
+        const prompt = `Categorize this civic issue into ONE of: Road Issues, Garbage & Cleanliness, Water / Drainage, Streetlight / Electricity, Public Safety, Public Facilities, Parks & Environment, Other. Output ONLY the category name.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: {
+                parts: [
+                    { inlineData: { data: base64Content, mimeType: mimeType } },
+                    { text: prompt }
+                ]
+            }
+        });
+
+        const text = response.text ? response.text.trim() : "Other";
+
+        // Simple validation
+        const valid = ["Road Issues", "Garbage & Cleanliness", "Water", "Drainage", "Streetlight", "Electricity", "Public Safety", "Public Facilities", "Parks", "Environment"];
+        if (valid.some(v => text.includes(v))) return text;
+        return "Other";
+
+    } catch (error) {
+        console.error("Gemini API Error (Category):", error);
         return "Other";
     }
 }

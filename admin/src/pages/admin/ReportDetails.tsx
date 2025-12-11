@@ -16,6 +16,11 @@ export default function ReportDetailsPage() {
     const { adminEmail } = useAuth();
     const [report, setReport] = useState<Report | null>(null);
     const [loading, setLoading] = useState(true);
+    const [showResolveDialog, setShowResolveDialog] = useState(false);
+    const [proofImage, setProofImage] = useState<File | null>(null);
+    const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
+
+    // Restoring missing state variables
     const [updating, setUpdating] = useState(false);
     const [officers, setOfficers] = useState<Officer[]>([]);
     const [showAssignDialog, setShowAssignDialog] = useState(false);
@@ -70,18 +75,71 @@ export default function ReportDetailsPage() {
         };
     }, [id]);
 
-    const handleUpdateStatus = async (newStatus: Report['status']) => {
+    const handleProofImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setProofImage(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setProofImagePreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleResolveReport = async () => {
         if (!report) return;
+
+        if (!proofImagePreview) {
+            toast.error("Please upload a proof image to resolve this issue.");
+            return;
+        }
 
         setUpdating(true);
         try {
-            const success = await reportService.updateReportStatus(report.id, newStatus, adminEmail);
+            // Reverted to client-side update with Base64 image
+            // We pass the Base64 string directly as the resolvedImageUrl
+            const result = await reportService.updateReportStatus(
+                report.id,
+                'resolved',
+                adminEmail,
+                proofImagePreview
+            );
 
-            if (success) {
+            if (result.success) {
+                toast.success("Report marked as resolved with proof!");
+                setShowResolveDialog(false);
+                setProofImage(null);
+                setProofImagePreview(null);
+                // The real-time subscription will update the UI
+            } else {
+                toast.error("Failed to update status: " + (result.error?.message || "Unknown error"));
+            }
+        } catch (error: any) {
+            console.error("Error resolving report:", error);
+            toast.error("An error occurred");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdateStatus = async (newStatus: Report['status']) => {
+        if (!report) return;
+
+        if (newStatus === 'resolved') {
+            setShowResolveDialog(true);
+            return;
+        }
+
+        setUpdating(true);
+        try {
+            const result = await reportService.updateReportStatus(report.id, newStatus, adminEmail);
+
+            if (result.success) {
                 toast.success(`Report marked as ${newStatus}`);
                 // The real-time subscription will update the UI
             } else {
-                toast.error("Failed to update status");
+                toast.error("Failed to update status: " + (result.error?.message || "Unknown error"));
             }
         } catch (error) {
             console.error("Error updating status:", error);
@@ -234,7 +292,7 @@ export default function ReportDetailsPage() {
     };
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in relative">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -278,10 +336,26 @@ export default function ReportDetailsPage() {
                         {/* Image */}
                         {report.image_url && (
                             <div className="mb-4">
+                                <h3 className="text-sm font-medium mb-2">Report Image</h3>
                                 <img
                                     src={report.image_url}
                                     alt="Report"
-                                    className="w-full h-64 object-cover rounded-lg border border-border"
+                                    className="w-full max-h-96 object-contain rounded-lg border border-border bg-gray-50"
+                                />
+                            </div>
+                        )}
+
+                        {/* Resolution Proof */}
+                        {report.resolved_image_url && (
+                            <div className="mb-4 pt-4 border-t border-border">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                    <h3 className="text-sm font-medium">Resolution Proof</h3>
+                                </div>
+                                <img
+                                    src={report.resolved_image_url}
+                                    alt="Resolution Proof"
+                                    className="w-full max-h-96 object-contain rounded-lg border border-border bg-gray-50"
                                 />
                             </div>
                         )}
@@ -471,6 +545,64 @@ export default function ReportDetailsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Resolve Dialog */}
+            {showResolveDialog && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-background rounded-xl max-w-md w-full p-6 shadow-2xl">
+                        <h2 className="text-xl font-bold text-foreground mb-2">Mark as Resolved</h2>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Please upload a proof image to confirm the resolution of this issue.
+                        </p>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-2">Proof Image (Required)</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleProofImageChange}
+                                className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                            />
+                        </div>
+
+                        {proofImagePreview && (
+                            <div className="mb-4">
+                                <img
+                                    src={proofImagePreview}
+                                    alt="Preview"
+                                    className="w-full h-48 object-cover rounded-lg border border-border"
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setShowResolveDialog(false);
+                                    setProofImage(null);
+                                    setProofImagePreview(null);
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleResolveReport}
+                                disabled={updating || !proofImage}
+                            >
+                                {updating ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Resolving...
+                                    </>
+                                ) : (
+                                    'Confirm Resolution'
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Officer Assignment Dialog */}
             {showAssignDialog && (

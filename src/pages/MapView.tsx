@@ -91,10 +91,12 @@ const MapView = () => {
   const navigate = useNavigate();
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [markers, setMarkers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchReports = async () => {
       try {
+        setIsLoading(true);
         const { data, error } = await supabase
           .from('reports')
           .select('*')
@@ -142,6 +144,8 @@ const MapView = () => {
         }
       } catch (error) {
         console.error("Error fetching map reports:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -157,6 +161,15 @@ const MapView = () => {
     <SwipeWrapper swipeDisabled={true} className="mobile-container h-screen flex flex-col bg-background pb-20">
       {/* Map Area */}
       <div className="relative flex-1 w-full z-0">
+        {isLoading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="text-sm font-medium text-muted-foreground">Loading reports...</span>
+            </div>
+          </div>
+        )}
+
         <MapContainer
           center={defaultCenter}
           zoom={5}

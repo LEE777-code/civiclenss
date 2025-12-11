@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, MapPin, Eye, Sparkles } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
-import { generateImageDescription } from "@/services/hfService";
+import { generateImageDescription, generateImageTitle, suggestCategory } from "@/services/geminiVision";
 
 
 const ReportIssue = () => {
@@ -34,33 +34,7 @@ const ReportIssue = () => {
         setSelectedImage(imageData);
         setShowImageOptions(false);
 
-        // Auto-generate description using Gemini Vision API
-        setIsAnalyzing(true);
-        toast.info("🤖 Analyzing image with AI...", { duration: 2000 });
 
-        try {
-          // Run all AI analyses in parallel for faster results
-          const [description, title, category] = await Promise.all([
-            generateImageDescription(imageData),
-            generateImageTitle(imageData),
-            suggestCategory(imageData)
-          ]);
-
-          // Update form with AI-generated content
-          setFormData(prev => ({
-            ...prev,
-            description: description,
-            title: title,
-            category: category
-          }));
-
-          toast.success("✨ AI analysis complete! Review and edit as needed.", { duration: 3000 });
-        } catch (error) {
-          console.error("AI analysis error:", error);
-          toast.error("Failed to analyze image. You can still fill in details manually.", { duration: 4000 });
-        } finally {
-          setIsAnalyzing(false);
-        }
       };
       reader.readAsDataURL(file);
     }
@@ -157,51 +131,48 @@ const ReportIssue = () => {
                 <label className="sr-only">Description</label>
                 <button
                   onClick={async () => {
-                    if (!formData.title?.trim()) {
-                      toast.error("Provide a title first to generate a description");
+                    if (!selectedImage) {
+                      toast.error("Please upload an image first");
                       return;
                     }
 
                     setGenerating(true);
+                    setIsAnalyzing(true);
+                    toast.info("🤖 Analyzing image with AI...", { duration: 2000 });
+
                     try {
-                      // Prefer using the uploaded File if available (keeps original binary)
-                      let fileToSend: File | null = selectedImageFile;
+                      // Run all AI analyses in parallel
+                      // Note: We pass selectedImage (string) or selectedImageFile (File)
+                      // geminiVision.ts handles both, but let's prefer the file if available
+                      const input = selectedImageFile || selectedImage;
 
-                      // If no File but we have a data URL preview, convert it to a File
-                      if (!fileToSend && selectedImage) {
-                        try {
-                          fileToSend = dataURLToFile(selectedImage, `${formData.title.replace(/\s+/g, '_') || 'image'}.jpg`);
-                        } catch (e) {
-                          console.warn('Failed to convert dataURL to File', e);
-                        }
-                      }
+                      const [description, title, category] = await Promise.all([
+                        generateImageDescription(input),
+                        generateImageTitle(input),
+                        suggestCategory(input)
+                      ]);
 
-                      if (fileToSend) {
-                        const desc = await generateImageDescription(fileToSend);
-                        if (desc) {
-                          setFormData({ ...formData, description: desc });
-                          toast.success("Description generated");
-                        } else {
-                          toast.error("Failed to generate description");
-                        }
-                      } else {
-                        // No image available — fall back to a simple heuristic using title
-                        const fallback = `${formData.title.trim()} — Please provide more details (location, visible markers, nearby landmarks).`;
-                        setFormData({ ...formData, description: fallback });
-                        toast.success("Description filled from title");
-                      }
+                      setFormData(prev => ({
+                        ...prev,
+                        description: description,
+                        title: title,
+                        category: category
+                      }));
+
+                      toast.success("✨ Analysis complete!");
                     } catch (e) {
                       console.error(e);
-                      const msg = (e as any)?.message || 'Error generating description';
+                      const msg = (e as any)?.message || 'Error analyzing image';
                       toast.error(msg);
                     } finally {
                       setGenerating(false);
+                      setIsAnalyzing(false);
                     }
                   }}
                   className="text-sm text-primary font-medium ml-auto"
-                  disabled={generating}
+                  disabled={generating || isAnalyzing}
                 >
-                  {generating ? "Generating..." : "Generate description"}
+                  {generating ? "Analyzing..." : "Auto-fill with AI"}
                 </button>
               </div>
               <textarea
@@ -224,7 +195,7 @@ const ReportIssue = () => {
                   className="input-field pl-12 pr-20"
                 />
                 <button
-                  onClick={() => navigate("/choose-location", { state: formData })}
+                  onClick={() => navigate("/choose-location", { state: { ...formData, image: selectedImage } })}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-primary font-medium text-sm"
                 >
                   Change
