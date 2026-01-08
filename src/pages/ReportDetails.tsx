@@ -6,10 +6,36 @@ import { useEffect, useState } from "react";
 import { toggleUpvote, hasUserUpvoted } from "@/services/upvoteService";
 import { toast } from "sonner";
 
+interface ProgressStep {
+  label: string;
+  time: string;
+  completed: boolean;
+  badge?: string;
+  resolvedBy?: string;
+}
+
+interface Report {
+  id: string;
+  title: string;
+  category: string;
+  severity: string;
+  description: string;
+  status: string;
+  date: string;
+  location: string;
+  image: string | null;
+  upvotes: number;
+  viewedByAdmin: boolean;
+  adminViewedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  progress: ProgressStep[];
+}
+
 const ReportDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [upvoting, setUpvoting] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
@@ -94,7 +120,7 @@ const ReportDetails = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, fetchReport]);
 
   useEffect(() => {
     // Check if user has already upvoted this report
@@ -119,10 +145,13 @@ const ReportDetails = () => {
         toast.success("Upvote removed!");
       }
       // Update local state
-      setReport((prevReport: any) => ({
-        ...prevReport,
-        upvotes: upvotes
-      }));
+      setReport((prevReport: Report | null) => {
+        if (!prevReport) return prevReport;
+        return {
+          ...prevReport,
+          upvotes: upvotes
+        };
+      });
       setHasUpvoted(upvoted);
     }
     setUpvoting(false);
@@ -257,7 +286,7 @@ const ReportDetails = () => {
         <div className="card-elevated">
           <h3 className="text-sm font-semibold text-foreground mb-4">Progress Status</h3>
           <div className="space-y-4">
-            {report.progress.map((step: any, index: number) => (
+            {report.progress.map((step: ProgressStep, index: number) => (
               <div key={index} className="flex items-start gap-3">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${step.completed ? "bg-primary" : "bg-muted border-2 border-border"
                   }`}>

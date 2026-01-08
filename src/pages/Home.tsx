@@ -237,24 +237,24 @@ const Home = () => {
                 <button
                   key={issue.id}
                   onClick={() => navigate(`/report-details/${issue.id}`)}
-                  className="card-elevated w-full text-left"
+                  className="card-elevated w-full text-left h-[88px] flex items-center"
                 >
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${style.bg}`}>
+                  <div className="flex items-center gap-4 w-full">
+                    <div className={`w-12 h-12 flex-shrink-0 rounded-xl flex items-center justify-center ${style.bg}`}>
                       <issue.icon size={24} className={style.text} />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground text-sm">{issue.title}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${style.badge}`}>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground text-sm truncate mb-1">{issue.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${style.badge}`}>
                           {issue.severity}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground truncate">
                           {issue.location} · {issue.distance}
                         </span>
                       </div>
                     </div>
-                    <ChevronRight size={20} className="text-muted-foreground" />
+                    <ChevronRight size={20} className="text-muted-foreground flex-shrink-0" />
                   </div>
                 </button>
               );

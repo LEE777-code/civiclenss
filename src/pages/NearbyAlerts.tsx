@@ -232,25 +232,26 @@ const NearbyAlerts = () => {
             filteredAlerts.map((alert, index) => (
               <div
                 key={alert.id}
-                className="card-elevated animate-fade-in"
+                className="card-elevated animate-fade-in cursor-pointer hover:shadow-lg transition-all duration-300 h-[88px] flex items-center"
                 style={{ animationDelay: `${index * 0.05}s` }}
+                onClick={() => navigate(`/report-details/${alert.id}`)}
               >
-                <div className="flex gap-4 mb-3">
-                  <div className={`w-12 h-12 ${alert.color} rounded-xl flex items-center justify-center shrink-0`}>
+                <div className="flex gap-4 w-full">
+                  <div className={`w-12 h-12 flex-shrink-0 ${alert.color} rounded-xl flex items-center justify-center`}>
                     <alert.icon size={24} className={alert.iconColor} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-foreground mb-1">{alert.title}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${alert.severity === "High" ? "bg-red-100 text-red-600" :
+                      <h3 className="font-semibold text-foreground text-sm truncate mb-1">{alert.title}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${alert.severity === "High" ? "bg-red-100 text-red-600" :
                         alert.severity === "Medium" ? "bg-amber-100 text-amber-600" : "bg-green-100 text-green-600"
                         }`}>
                         {alert.severity}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{alert.description}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-muted-foreground">Time: {alert.time}</span>
+                    <p className="text-xs text-muted-foreground truncate">{alert.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground truncate">Time: {alert.time}</span>
                       <span className="text-xs text-muted-foreground">•</span>
                       <span className="text-xs text-muted-foreground">{alert.status}</span>
                     </div>

@@ -86,7 +86,7 @@ const ChooseLocation = () => {
           'lastLocation',
           JSON.stringify({ address: 'Selected Location', lat, lng })
         );
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setIsLoading(false);
     }
@@ -149,7 +149,7 @@ const ChooseLocation = () => {
     // Persist chosen location and return to report form
     try {
       localStorage.setItem('lastLocation', JSON.stringify({ address: location.address, lat: location.lat, lng: location.lng }));
-    } catch (e) {}
+    } catch (e) { }
     navigate("/report", {
       state: {
         ...previousFormData,

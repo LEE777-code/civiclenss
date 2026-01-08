@@ -4,23 +4,6 @@ import {
     rgb
 } from "pdf-lib";
 
-// Helper for drawing section headers
-const drawSectionTitle = (page: any, text: string, x: number, y: number, font: any) => {
-    page.drawText(text, {
-        x,
-        y,
-        size: 14,
-        font,
-        color: rgb(0, 0.45, 0.75),
-    });
-    page.drawLine({
-        start: { x, y: y - 5 },
-        end: { x: 550, y: y - 5 },
-        thickness: 1,
-        color: rgb(0.8, 0.8, 0.8),
-    });
-};
-
 interface ReportData {
     id: string;
     title: string;
@@ -35,145 +18,279 @@ interface ReportData {
     createdAt: string;
 }
 
+// Helper for wrapping text
+const wrapText = (text: string, maxWidth: number): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (testLine.length <= maxWidth) {
+            currentLine = testLine;
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    });
+
+    if (currentLine) lines.push(currentLine);
+    return lines;
+};
+
 export async function generateReportPDF(report: ReportData) {
+    // Normalize fields so missing data does not break PDF generation
+    const safeId = report.id || 'UNKNOWN';
+    const safeTitle = report.title || 'No title provided';
+    const safeStatus = report.status || 'Pending';
+    const safeSeverity = report.severity || 'Medium';
+    const safeCategory = report.category || 'General';
+    const safeLocation = report.location || 'Unknown Location';
+    const createdDate = report.createdAt ? new Date(report.createdAt) : new Date();
+
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595.28, 841.89]); // A4 size points
+    let page = pdfDoc.addPage([595.28, 841.89]); // A4 size
 
     const { width, height } = page.getSize();
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-    // Colors
-    const primaryColor = rgb(0.1, 0.4, 0.7);
-    const secondaryColor = rgb(0.3, 0.3, 0.3);
-    const bgColor = rgb(0.96, 0.96, 0.98);
+    // Project Colors - matching index.css
+    const primaryTeal = rgb(0.043, 0.58, 0.533); // hsl(174, 82%, 26%) 
+    const darkText = rgb(0.1, 0.1, 0.1);
+    const grayText = rgb(0.47, 0.5, 0.54);
+    const lightBg = rgb(0.96, 0.96, 0.98);
+    const successGreen = rgb(0.13, 0.69, 0.3); // hsl(142, 76%, 36%)
+    const warningOrange = rgb(0.97, 0.59, 0.0); // hsl(38, 92%, 50%)
+    const errorRed = rgb(0.87, 0.26, 0.26); // hsl(0, 84%, 60%)
+    const borderGray = rgb(0.88, 0.88, 0.9);
 
     // ------------------------------
-    // 1. HEADER
+    // HEADER
     // ------------------------------
     page.drawRectangle({
         x: 0,
-        y: height - 120,
+        y: height - 90,
         width,
-        height: 120,
-        color: bgColor,
+        height: 90,
+        color: lightBg,
     });
 
-    page.drawText("CIVIC REPORT", {
+    page.drawText("CIVICLENS", {
         x: 50,
-        y: height - 60,
-        size: 28,
+        y: height - 40,
+        size: 24,
         font: fontBold,
-        color: primaryColor,
+        color: primaryTeal,
     });
 
-    page.drawText(`Status: ${report.status.toUpperCase()}`, {
+    page.drawText("Civic Issue Report", {
         x: 50,
-        y: height - 85,
-        size: 14,
-        font: fontBold,
-        color: report.status.toLowerCase() === 'resolved' ? rgb(0, 0.6, 0.2) : secondaryColor,
-    });
-
-    page.drawText(`Report ID: #${report.id.substring(0, 8)}`, {
-        x: width - 200,
-        y: height - 60,
-        size: 12,
+        y: height - 58,
+        size: 10,
         font,
-        color: secondaryColor,
+        color: grayText,
     });
 
-    page.drawText(`Date: ${new Date(report.createdAt).toLocaleDateString()}`, {
-        x: width - 200,
+    // Status Badge
+    const statusText = safeStatus.toUpperCase();
+    const statusColor = safeStatus.toLowerCase() === 'resolved' ? successGreen :
+        safeStatus.toLowerCase() === 'rejected' ? errorRed : warningOrange;
+
+    const badgeX = width - 140;
+    const badgeY = height - 42;
+
+    page.drawRectangle({
+        x: badgeX,
+        y: badgeY - 5,
+        width: 90,
+        height: 22,
+        color: rgb(
+            statusColor.red * 0.15 + 0.85,
+            statusColor.green * 0.15 + 0.85,
+            statusColor.blue * 0.15 + 0.85
+        ),
+        borderColor: statusColor,
+        borderWidth: 1,
+    });
+
+    page.drawText(statusText, {
+        x: badgeX + 8,
+        y: badgeY + 2,
+        size: 10,
+        font: fontBold,
+        color: statusColor,
+    });
+
+    // ID and date
+    page.drawText(`ID: ${safeId.substring(0, 8)}`, {
+        x: width - 140,
+        y: height - 68,
+        size: 8,
+        font,
+        color: grayText,
+    });
+
+    page.drawText(new Date().toLocaleDateString(), {
+        x: width - 140,
         y: height - 80,
-        size: 12,
+        size: 8,
         font,
-        color: secondaryColor,
+        color: grayText,
     });
 
     // ------------------------------
-    // 2. REPORT DETAILS
+    // DETAILS SECTION
     // ------------------------------
-    let yPos = height - 160;
+    let yPos = height - 120;
 
-    const drawLabelValue = (label: string, value: string, x: number) => {
-        page.drawText(label, { x, y: yPos, size: 10, font: fontBold, color: rgb(0.5, 0.5, 0.5) });
-        page.drawText(value, { x, y: yPos - 15, size: 12, font, color: rgb(0.1, 0.1, 0.1) });
+    page.drawText("ISSUE DETAILS", {
+        x: 50,
+        y: yPos,
+        size: 12,
+        font: fontBold,
+        color: primaryTeal,
+    });
+
+    yPos -= 25;
+
+    // Title - multi-line support
+    const titleLines = wrapText(safeTitle, 70);
+    const titleHeight = titleLines.length * 16;
+
+    titleLines.forEach((line, index) => {
+        page.drawText(line, {
+            x: 55,
+            y: yPos - (index * 16),
+            size: 13,
+            font: fontBold,
+            color: darkText,
+        });
+    });
+
+    yPos -= titleHeight + 15;
+
+    // Info grid
+    const drawInfoField = (label: string, value: string, x: number) => {
+        page.drawText(label, {
+            x,
+            y: yPos,
+            size: 7,
+            font: fontBold,
+            color: grayText,
+        });
+
+        const valueColor = label === "SEVERITY" ? (
+            value === "High" ? errorRed :
+                value === "Medium" ? warningOrange : successGreen
+        ) : darkText;
+
+        page.drawText(value, {
+            x,
+            y: yPos - 14,
+            size: 10,
+            font: label === "SEVERITY" ? fontBold : font,
+            color: valueColor,
+        });
     };
 
-    drawSectionTitle(page, "Issue Details", 50, yPos, fontBold);
-    yPos -= 40;
+    drawInfoField("CATEGORY", safeCategory, 55);
+    drawInfoField("SEVERITY", safeSeverity, 220);
+    drawInfoField("DATE", createdDate.toLocaleDateString(), 380);
 
-    drawLabelValue("CATEGORY", report.category, 50);
-    drawLabelValue("SEVERITY", report.severity, 250);
-    drawLabelValue("SUBMITTED AT", new Date(report.createdAt).toLocaleString(), 400);
+    yPos -= 35;
 
-    yPos -= 50;
+    // Location - multi-line support
+    page.drawText("LOCATION", {
+        x: 55,
+        y: yPos,
+        size: 7,
+        font: fontBold,
+        color: grayText,
+    });
 
-    drawLabelValue("LOCATION", report.location, 50);
+    const locationLines = wrapText(safeLocation, 80);
+    locationLines.slice(0, 3).forEach((line, index) => {
+        page.drawText(line, {
+            x: 55,
+            y: yPos - 14 - (index * 12),
+            size: 9,
+            font,
+            color: darkText,
+        });
+    });
 
-    yPos -= 50;
+    yPos -= 14 + (locationLines.slice(0, 3).length * 12) + 25;
 
-    page.drawText("DESCRIPTION", { x: 50, y: yPos, size: 10, font: fontBold, color: rgb(0.5, 0.5, 0.5) });
-    yPos -= 15;
+    // ------------------------------
+    // DESCRIPTION
+    // ------------------------------
+    page.drawText("DESCRIPTION", {
+        x: 50,
+        y: yPos,
+        size: 12,
+        font: fontBold,
+        color: primaryTeal,
+    });
+
+    yPos -= 20;
 
     const desc = report.description || "No description provided";
-    const wrappedLines = desc.match(/.{1,90}/g) || [];
+    const descLines = wrapText(desc, 85);
 
-    wrappedLines.forEach((line) => {
-        page.drawText(line, { x: 50, y: yPos, size: 11, font, color: rgb(0.15, 0.15, 0.15) });
-        yPos -= 16;
+    // Show all description lines (dynamic)
+    descLines.forEach((line, index) => {
+        // Check if we need a new page
+        if (yPos < 100) {
+            page = pdfDoc.addPage([595.28, 841.89]);
+            yPos = height - 50;
+        }
+
+        page.drawText(line, {
+            x: 55,
+            y: yPos,
+            size: 9,
+            font,
+            color: darkText,
+        });
+        yPos -= 13;
+    });
+
+    yPos -= 25;
+
+    // ------------------------------
+    // IMAGES
+    // ------------------------------
+    if (yPos < 280) {
+        page = pdfDoc.addPage([595.28, 841.89]);
+        yPos = height - 50;
+    }
+
+    page.drawText("EVIDENCE", {
+        x: 50,
+        y: yPos,
+        size: 12,
+        font: fontBold,
+        color: primaryTeal,
     });
 
     yPos -= 30;
 
-    // ------------------------------
-    // 3. EVIDENCE & PROOF
-    // ------------------------------
-    if (yPos < 300) { page.addPage([595.28, 841.89]); yPos = 800; } // New page if low
-
-    drawSectionTitle(page, "Evidence & Resolution", 50, yPos, fontBold);
-    yPos -= 40;
-
-    const embedImage = async (imgData: string) => {
-        try {
-            if (!imgData) return null;
-            if (imgData.startsWith('data:image')) {
-                const base64Data = imgData.split(',')[1];
-                const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-                if (imgData.includes('image/png')) return await pdfDoc.embedPng(imageBytes);
-                return await pdfDoc.embedJpg(imageBytes);
-            }
-            // If URL, we can't fetch client-side easily in PDF-lib without fetching first.
-            // Assuming simplified client-side flow where 'image' passed is base64 for now as per app Logic.
-            // If resolved_image_url is a Supabase URL, we might need to fetch it first in MyReports.
-            // But for now, let's assume valid base64 or skipped.
-            return null;
-        } catch (e) {
-            console.error("Image embed error", e);
-            return null;
-        }
-    };
-
-    // We need to fetch the resolved image if it's a URL (from Supabase public URL) before embedding?
-    // Wait, MyReports passes 'resolved_image_url' which is likely a URL from the DB.
-    // pdf-lib cannot embed from URL directly. We need to fetch it as ArrayBuffer.
-    // But we are in an async function, so we can fetch!
-
+    // Fetch images
     const fetchImageBytes = async (urlOrBase64: string) => {
         try {
             if (urlOrBase64.startsWith('data:image')) {
                 const base64Data = urlOrBase64.split(',')[1];
                 return Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
             } else if (urlOrBase64.startsWith('http')) {
-                const updatedUrl = urlOrBase64 + '?t=' + new Date().getTime(); // Cache bust
-                const res = await fetch(updatedUrl);
-                const arrayBuffer = await res.arrayBuffer();
-                return new Uint8Array(arrayBuffer);
+                const res = await fetch(urlOrBase64 + '?t=' + Date.now());
+                return new Uint8Array(await res.arrayBuffer());
             }
             return null;
-        } catch (e) { console.error("Fetch img error", e); return null; }
+        } catch (e) {
+            console.error("Image fetch error", e);
+            return null;
+        }
     };
 
     const imageBytes1 = report.image ? await fetchImageBytes(report.image) : null;
@@ -183,37 +300,135 @@ export async function generateReportPDF(report: ReportData) {
     if (imageBytes1) img1 = await pdfDoc.embedJpg(imageBytes1).catch(() => pdfDoc.embedPng(imageBytes1).catch(() => null));
     if (imageBytes2) img2 = await pdfDoc.embedJpg(imageBytes2).catch(() => pdfDoc.embedPng(imageBytes2).catch(() => null));
 
-    // Draw Images Side by Side or Stacked
-    const imgWidth = 230;
-    const imgHeight = 180;
+    const imgWidth = 220;
+    const imgHeight = 170;
+
+    // Original image
+    page.drawText("Original Issue", {
+        x: 55,
+        y: yPos,
+        size: 8,
+        font: fontBold,
+        color: grayText,
+    });
 
     if (img1) {
-        page.drawImage(img1, { x: 50, y: yPos - imgHeight, width: imgWidth, height: imgHeight });
-        page.drawText("Original Issue", { x: 50, y: yPos - imgHeight - 15, size: 10, font: fontOblique, color: secondaryColor });
+        page.drawImage(img1, {
+            x: 55,
+            y: yPos - imgHeight - 15,
+            width: imgWidth,
+            height: imgHeight
+        });
     } else {
-        page.drawRectangle({ x: 50, y: yPos - imgHeight, width: imgWidth, height: imgHeight, color: rgb(0.9, 0.9, 0.9) });
-        page.drawText("No Image Available", { x: 100, y: yPos - (imgHeight / 2), size: 10, font, color: secondaryColor });
+        page.drawRectangle({
+            x: 55,
+            y: yPos - imgHeight - 15,
+            width: imgWidth,
+            height: imgHeight,
+            color: rgb(0.93, 0.93, 0.93),
+            borderColor: borderGray,
+            borderWidth: 1,
+        });
+        page.drawText("No Image", {
+            x: 120,
+            y: yPos - (imgHeight / 2) - 10,
+            size: 9,
+            font,
+            color: grayText,
+        });
     }
 
-    if (img2) {
-        page.drawImage(img2, { x: 300, y: yPos - imgHeight, width: imgWidth, height: imgHeight });
-        page.drawText("Resolution Proof", { x: 300, y: yPos - imgHeight - 15, size: 10, font: fontOblique, color: secondaryColor });
-    } else if (report.status.toLowerCase() === 'resolved') {
-        page.drawRectangle({ x: 300, y: yPos - imgHeight, width: imgWidth, height: imgHeight, color: rgb(0.9, 0.9, 0.9) });
-        page.drawText("No Proof Image", { x: 350, y: yPos - (imgHeight / 2), size: 10, font, color: secondaryColor });
+    // Resolution image (if resolved)
+    if (safeStatus.toLowerCase() === 'resolved' || img2) {
+        const img2X = 295;
+
+        page.drawText("Resolution Proof", {
+            x: img2X,
+            y: yPos,
+            size: 8,
+            font: fontBold,
+            color: safeStatus.toLowerCase() === 'resolved' ? successGreen : grayText,
+        });
+
+        if (img2) {
+            page.drawImage(img2, {
+                x: img2X,
+                y: yPos - imgHeight - 15,
+                width: imgWidth,
+                height: imgHeight
+            });
+        } else {
+            page.drawRectangle({
+                x: img2X,
+                y: yPos - imgHeight - 15,
+                width: imgWidth,
+                height: imgHeight,
+                color: rgb(0.93, 0.93, 0.93),
+                borderColor: borderGray,
+                borderWidth: 1,
+            });
+            page.drawText("Pending", {
+                x: img2X + 75,
+                y: yPos - (imgHeight / 2) - 10,
+                size: 9,
+                font,
+                color: grayText,
+            });
+        }
     }
 
     // ------------------------------
-    // Footer
+    // FOOTER
     // ------------------------------
     const pages = pdfDoc.getPages();
     pages.forEach((p, idx) => {
-        const { width, height } = p.getSize();
-        p.drawLine({ start: { x: 50, y: 40 }, end: { x: width - 50, y: 40 }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-        p.drawText(`CivicLens Official Report - Generated on ${new Date().toLocaleString()}`, {
-            x: 50, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6)
+        const { width } = p.getSize();
+
+        p.drawRectangle({
+            x: 0,
+            y: 0,
+            width,
+            height: 45,
+            color: lightBg,
         });
-        p.drawText(`${idx + 1} / ${pages.length}`, { x: width - 70, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6) });
+
+        p.drawText("CIVICLENS", {
+            x: 50,
+            y: 22,
+            size: 9,
+            font: fontBold,
+            color: primaryTeal,
+        });
+
+        p.drawText("Official Report", {
+            x: 50,
+            y: 12,
+            size: 7,
+            font,
+            color: grayText,
+        });
+
+        p.drawText(`Generated: ${new Date().toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })}`, {
+            x: 200,
+            y: 17,
+            size: 7,
+            font,
+            color: grayText,
+        });
+
+        p.drawText(`Page ${idx + 1} of ${pages.length}`, {
+            x: width - 80,
+            y: 17,
+            size: 8,
+            font,
+            color: grayText,
+        });
     });
 
     return await pdfDoc.save();

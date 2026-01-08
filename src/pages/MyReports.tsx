@@ -317,16 +317,16 @@ const MyReports = () => {
               >
                 <button
                   onClick={() => navigate(`/report-details/${report.id}`)}
-                  className="w-full text-left"
+                  className="w-full text-left h-[88px] flex items-center"
                 >
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                  <div className="flex gap-4 w-full">
+                    <div className="w-12 h-12 flex-shrink-0 bg-primary/10 rounded-xl flex items-center justify-center">
                       <report.icon size={24} className="text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold text-foreground text-sm">{report.title}</h3>
-                        <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${getStatusStyle(report.status)}`}>
+                        <h3 className="font-semibold text-foreground text-sm truncate">{report.title}</h3>
+                        <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${getStatusStyle(report.status)}`}>
                           {report.status}
                         </span>
                       </div>
@@ -339,7 +339,7 @@ const MyReports = () => {
                           {report.severity} Priority
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
                         {report.location} • {report.date}
                       </p>
                     </div>
