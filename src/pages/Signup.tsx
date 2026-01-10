@@ -4,6 +4,7 @@ import { Shield, Eye, EyeOff, User, Mail, Phone, Lock, Calendar, MapPin } from "
 import { useSignUp } from "@clerk/clerk-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { setAuthState } from "@/services/authService";
 
 const DISTRICTS = [
   "Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri",
@@ -97,6 +98,9 @@ const Signup = () => {
 
       if (completeSignUp.status === "complete") {
         await setActive({ session: completeSignUp.createdSessionId });
+
+        // Set auth state in localStorage
+        setAuthState(completeSignUp.createdUserId!);
 
         // Save to Supabase
         const { error } = await supabase.from('users').insert({

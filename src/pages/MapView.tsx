@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, useMap, Tooltip } from "react-leaflet";
@@ -7,6 +7,9 @@ import "leaflet/dist/leaflet.css";
 import BottomNav from "@/components/BottomNav";
 import SwipeWrapper from "@/components/SwipeWrapper";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { cacheMapReports, getCachedMapReports } from "@/services/offlineService";
 
 // Fix for default Leaflet marker icons in React/Vite
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -38,7 +41,7 @@ const getSeverityIcon = (severity: string) => {
   });
 };
 
-// Geocode a location name using Nominatim (OpenStreetMap)
+// Geocode a location name using backend proxy
 const geocodeLocation = async (location: string) => {
   if (!location) return null;
   try {
@@ -47,12 +50,15 @@ const geocodeLocation = async (location: string) => {
     const cached = localStorage.getItem(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`;
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
+    // Use backend proxy endpoint instead of direct Nominatim call
+    const url = `http://localhost:3001/api/search-location?q=${encodeURIComponent(location)}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      console.warn('Geocode API request failed:', res.status);
+      return null;
+    }
+
     const json = await res.json();
     if (Array.isArray(json) && json.length > 0) {
       const lat = parseFloat(json[0].lat);
@@ -67,21 +73,25 @@ const geocodeLocation = async (location: string) => {
   return null;
 };
 
-// Component to fit bounds
-const FitBoundsEvents = ({ markers }: { markers: any[] }) => {
+// Component to handle user location and zoom
+const UserLocationHandler = ({ userLocation }: { userLocation: { lat: number, lng: number } | null }) => {
   const map = useMap();
+
   useEffect(() => {
-    if (markers.length > 0) {
-      const valid = markers.filter(m => m.lat && m.lng);
-      if (valid.length > 0) {
-        const bounds = L.latLngBounds(valid.map(m => [m.lat, m.lng]));
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    } else {
-      // Try to locate user if no markers
-      map.locate({ setView: true, maxZoom: 16 });
+    // Set zoom limits
+    map.setMinZoom(4); // Allow state/province level view, prevent excessive zoom out
+    map.setMaxZoom(18); // Maximum zoom level
+  }, [map]);
+
+  useEffect(() => {
+    if (userLocation) {
+      // Fly to user location with full zoom
+      map.flyTo([userLocation.lat, userLocation.lng], 16, {
+        duration: 1.5
+      });
     }
-  }, [markers, map]);
+  }, [userLocation, map]);
+
   return null;
 };
 
@@ -89,58 +99,140 @@ const defaultCenter: [number, number] = [20.5937, 78.9629]; // India
 
 const MapView = () => {
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [markers, setMarkers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const locationRequested = useRef(false);
+
+  // Request user location on mount
+  useEffect(() => {
+    const requestUserLocation = () => {
+      // Prevent duplicate location requests
+      if (locationRequested.current) return;
+      locationRequested.current = true;
+
+      if (!navigator.geolocation) {
+        toast.error("Geolocation is not supported by your browser");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          setLocationPermissionDenied(false);
+          // Removed duplicate toast notification
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          setLocationPermissionDenied(true);
+
+          if (error.code === error.PERMISSION_DENIED) {
+            toast.error("Please enable location services to see nearby issues", {
+              duration: 5000,
+              action: {
+                label: "Settings",
+                onClick: () => {
+                  toast.info("Please enable location in your browser settings");
+                }
+              }
+            });
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            toast.error("Location information is unavailable");
+          } else if (error.code === error.TIMEOUT) {
+            toast.error("Location request timed out");
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    };
+
+    requestUserLocation();
+  }, []);
 
   useEffect(() => {
     const fetchReports = async () => {
       try {
         setIsLoading(true);
-        const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('status', 'pending') // Only show pending reports so markers match Nearby issues
-          .order('created_at', { ascending: false })
-          .limit(50); // Fetch more than Home (5) to populate the map well
 
-        if (data) {
-          const prepared: any[] = [];
+        if (isOnline) {
+          const { data, error } = await supabase
+            .from('reports')
+            .select('*')
+            .eq('status', 'pending') // Only show pending reports so markers match Nearby issues
+            .order('created_at', { ascending: false })
+            .limit(50); // Fetch more than Home (5) to populate the map well
 
-          // First pass: use reports that already have coordinates
-          for (const report of data) {
-            if (report.latitude && report.longitude) {
-              prepared.push({
-                id: report.id,
-                lat: parseFloat(report.latitude),
-                lng: parseFloat(report.longitude),
-                type: report.category,
-                severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
-                title: report.title,
-                originalData: report
-              });
+          if (data) {
+            const prepared: any[] = [];
+
+            // First pass: use reports that already have coordinates
+            for (const report of data) {
+              if (report.latitude && report.longitude) {
+                prepared.push({
+                  id: report.id,
+                  lat: parseFloat(report.latitude),
+                  lng: parseFloat(report.longitude),
+                  type: report.category,
+                  severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
+                  title: report.title,
+                  originalData: report
+                });
+              }
             }
-          }
 
-          // For reports without coords, attempt geocoding for a limited number to avoid rate limits
-          const toGeocode = data.filter(r => !(r.latitude && r.longitude)).slice(0, 10);
-          for (const report of toGeocode) {
-            const locName = report.location_name || report.location || '';
-            const geo = await geocodeLocation(locName);
-            if (geo) {
-              prepared.push({
-                id: report.id,
-                lat: geo.lat,
-                lng: geo.lon,
-                type: report.category,
-                severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
-                title: report.title + (locName ? ` — ${locName}` : ''),
-                originalData: report
-              });
+            // For reports without coords, attempt geocoding for a limited number to avoid rate limits
+            const toGeocode = data.filter(r => !(r.latitude && r.longitude)).slice(0, 10);
+            for (const report of toGeocode) {
+              const locName = report.location_name || report.location || '';
+              const geo = await geocodeLocation(locName);
+              if (geo) {
+                prepared.push({
+                  id: report.id,
+                  lat: geo.lat,
+                  lng: geo.lon,
+                  type: report.category,
+                  severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
+                  title: report.title + (locName ? ` — ${locName}` : ''),
+                  originalData: report
+                });
+              }
             }
-          }
 
-          setMarkers(prepared);
+            setMarkers(prepared);
+
+            // Cache for offline use  
+            await cacheMapReports(data);
+          }
+        } else {
+          // Load from cache when offline
+          const cachedData = await getCachedMapReports();
+          if (cachedData.length > 0) {
+            const prepared: any[] = [];
+
+            // Show only reports with coordinates from cache
+            for (const report of cachedData) {
+              if (report.latitude && report.longitude && report.status === 'pending') {
+                prepared.push({
+                  id: report.id,
+                  lat: parseFloat(report.latitude),
+                  lng: parseFloat(report.longitude),
+                  type: report.category,
+                  severity: report.severity ? (report.severity.charAt(0).toUpperCase() + report.severity.slice(1)) : 'Medium',
+                  title: report.title,
+                  originalData: report
+                });
+              }
+            }
+            setMarkers(prepared);
+          }
         }
       } catch (error) {
         console.error("Error fetching map reports:", error);
@@ -150,7 +242,7 @@ const MapView = () => {
     };
 
     fetchReports();
-  }, []);
+  }, [isOnline]);
 
   // Debug logs
   useEffect(() => {
@@ -181,7 +273,7 @@ const MapView = () => {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <FitBoundsEvents markers={markers} />
+          <UserLocationHandler userLocation={userLocation} />
 
           {/* Markers */}
           {markers.map((marker) => (

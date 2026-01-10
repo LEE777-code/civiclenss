@@ -1,16 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, AlertTriangle, Lightbulb, Cloud, CloudRain, CloudSnow, CloudLightning } from "lucide-react";
+import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, Cloud, CloudRain, CloudSnow, CloudLightning } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import BottomNav from "@/components/BottomNav";
 import SwipeWrapper from "@/components/SwipeWrapper";
 import { getWeather, WeatherData } from "@/services/WeatherService";
-
+import { getCategoryIcon } from "@/utils/categoryIcons";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { cacheHomeReports, getCachedHomeReports, cacheWeatherData, getCachedWeatherData, cacheReportStats, getCachedReportStats } from "@/services/offlineService";
 import { supabase } from "@/lib/supabase";
 
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const isOnline = useOnlineStatus();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [lastLocation, setLastLocation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,41 +23,85 @@ const Home = () => {
 
   const fetchReports = async () => {
     try {
-      // Fetch nearby issues - Only show pending reports (not resolved/rejected)
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('status', 'pending')  // Only show pending reports
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (data) {
-        setNearbyIssues(data.map(report => ({
-          id: report.id,
-          title: report.title,
-          severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-          location: report.location_name || "Unknown Location",
-          distance: "0.5 mi away", // Placeholder for now
-          icon: report.category === 'Streetlight / Electricity' ? Lightbulb : AlertTriangle, // Simple logic for icon
-        })));
+      // Load from cache immediately for instant display
+      const cachedData = await getCachedHomeReports();
+      if (cachedData.length > 0) {
+        const formattedReports = cachedData
+          .filter((report: any) => report.status === 'pending')
+          .slice(0, 5)
+          .map((report: any) => ({
+            id: report.id,
+            title: report.title,
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            location: report.location_name || "Unknown Location",
+            distance: "0.5 mi away",
+            category: report.category,
+            icon: getCategoryIcon(report.category || "Other"),
+          }));
+        setNearbyIssues(formattedReports);
       }
 
-      // Fetch counts
-      const { count: pendingCount } = await supabase
-        .from('reports')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+      // Load cached stats immediately
+      const cachedStats = await getCachedReportStats();
+      if (cachedStats) {
+        setReportCounts({
+          pending: cachedStats.pending_count,
+          resolved: cachedStats.resolved_count
+        });
+      }
 
-      const { count: resolvedCount } = await supabase
-        .from('reports')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'resolved');
+      // Then fetch fresh data if online
+      if (isOnline) {
+        // Fetch nearby issues - Only show pending reports (not resolved/rejected)
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('status', 'pending')  // Only show pending reports
+          .order('created_at', { ascending: false })
+          .limit(5);
 
-      setReportCounts({
-        pending: pendingCount || 0,
-        resolved: resolvedCount || 0
-      });
+        if (data) {
+          const formattedReports = data.map(report => ({
+            id: report.id,
+            title: report.title,
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            location: report.location_name || "Unknown Location",
+            distance: "0.5 mi away", // Placeholder for now
+            category: report.category,
+            icon: getCategoryIcon(report.category || "Other"),
+          }));
+          setNearbyIssues(formattedReports);
 
+          // Cache reports for offline use
+          await cacheHomeReports(data);
+        }
+
+        // Fetch counts
+        const { count: pendingCount } = await supabase
+          .from('reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending');
+
+        const { count: resolvedCount } = await supabase
+          .from('reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'resolved');
+
+        const newStats = {
+          pending: pendingCount || 0,
+          resolved: resolvedCount || 0
+        };
+
+        setReportCounts(newStats);
+
+        // Cache statistics for offline use
+        await cacheReportStats({
+          pending_count: newStats.pending,
+          resolved_count: newStats.resolved,
+          rejected_count: 0,
+          total_count: newStats.pending + newStats.resolved
+        });
+      }
     } catch (error) {
       console.error("Error fetching reports:", error);
     }
@@ -63,29 +110,31 @@ const Home = () => {
   useEffect(() => {
     fetchReports();
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('home-reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'reports'
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          // Refetch data when any change occurs
-          fetchReports();
-        }
-      )
-      .subscribe();
+    // Set up real-time subscription only when online
+    if (isOnline) {
+      const channel = supabase
+        .channel('home-reports')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+            schema: 'public',
+            table: 'reports'
+          },
+          (payload) => {
+            console.log('Real-time update received:', payload);
+            // Refetch data when any change occurs
+            fetchReports();
+          }
+        )
+        .subscribe();
 
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+      // Cleanup subscription on unmount
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [isOnline]);
 
   useEffect(() => {
     const fetchWeather = async () => {
@@ -107,18 +156,46 @@ const Home = () => {
           // ignore parse errors
         }
 
-        const data = await getWeather(lat, lng);
-        if (data) {
-          setWeather(data);
-        } else {
+        // Try to load cached weather data first
+        const cachedWeather = await getCachedWeatherData(lat, lng);
+        if (cachedWeather) {
+          console.log('📖 Using cached weather data');
+          setWeather({
+            temp: cachedWeather.temperature,
+            condition: cachedWeather.condition,
+            location: cachedWeather.location_name,
+            icon: undefined // icon is not cached, will use default
+          });
+        }
+
+        // Fetch fresh weather data if online
+        if (isOnline) {
+          const data = await getWeather(lat, lng);
+          if (data) {
+            setWeather(data);
+            // Cache weather data for offline use
+            await cacheWeatherData({
+              latitude: lat,
+              longitude: lng,
+              temperature: data.temp,
+              condition: data.condition,
+              location_name: data.location
+            });
+          } else if (!cachedWeather) {
+            setError("Unavailable");
+          }
+        } else if (!cachedWeather) {
           setError("Unavailable");
         }
       } catch (err) {
-        setError("Error");
+        console.error('Weather fetch error:', err);
+        if (!weather) {
+          setError("Error");
+        }
       }
     };
     fetchWeather();
-  }, []);
+  }, [isOnline]);
 
   const getWeatherIcon = (condition: string) => {
     switch (condition.toLowerCase()) {

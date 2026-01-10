@@ -1,13 +1,19 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
+import { isAuthenticated } from "@/services/authService";
 
 const Splash = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate("/onboarding");
+      // Check if user is already authenticated
+      if (isAuthenticated()) {
+        navigate("/home");
+      } else {
+        navigate("/onboarding");
+      }
     }, 2500);
     return () => clearTimeout(timer);
   }, [navigate]);

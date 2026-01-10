@@ -2,7 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { isAuthenticated } from "@/services/authService";
+import OfflineIndicator from "@/components/OfflineIndicator";
 import Splash from "./pages/Splash";
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
@@ -21,27 +23,38 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Protected Route Component
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// Auth Route Component (redirects to home if already authenticated)
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  return isAuthenticated() ? <Navigate to="/home" replace /> : <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <OfflineIndicator />
         <Routes>
           <Route path="/" element={<Splash />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/report" element={<ReportIssue />} />
-          <Route path="/choose-location" element={<ChooseLocation />} />
-          <Route path="/issue-preview" element={<IssuePreview />} />
-          <Route path="/alerts" element={<NearbyAlerts />} />
-          <Route path="/my-reports" element={<MyReports />} />
-          <Route path="/report-details/:id" element={<ReportDetails />} />
-          <Route path="/map" element={<MapView />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/edit-profile" element={<EditProfile />} />
+          <Route path="/onboarding" element={<AuthRoute><Onboarding /></AuthRoute>} />
+          <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+          <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
+          <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/report" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
+          <Route path="/choose-location" element={<ProtectedRoute><ChooseLocation /></ProtectedRoute>} />
+          <Route path="/issue-preview" element={<ProtectedRoute><IssuePreview /></ProtectedRoute>} />
+          <Route path="/alerts" element={<ProtectedRoute><NearbyAlerts /></ProtectedRoute>} />
+          <Route path="/my-reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
+          <Route path="/report-details/:id" element={<ProtectedRoute><ReportDetails /></ProtectedRoute>} />
+          <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

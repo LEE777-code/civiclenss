@@ -27,6 +27,27 @@
   z-index: 0;
 }
 
+/* Minimize Leaflet attribution/watermark */
+.leaflet-control-attribution {
+  font-size: 6px !important;
+  opacity: 0.15 !important;
+  padding: 1px 2px !important;
+  background: rgba(255, 255, 255, 0.3) !important;
+  pointer-events: none !important;
+}
+
+.dark .leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.2) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.leaflet-control-attribution a {
+  font-size: 6px !important;
+  opacity: 0.15 !important;
+  pointer-events: auto !important;
+}
+
+
 @layer base {
   :root {
     --background: 0 0% 100%;

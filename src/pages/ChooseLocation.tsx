@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { addLocationHistory } from "@/services/offlineService";
 
 // Fix for default Leaflet marker icons
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -35,6 +36,13 @@ function LocationMarker({ onLocationSelect }: { onLocationSelect: (lat: number, 
 // Component to handle external location updates
 const RecenterMap = ({ lat, lng }: { lat: number, lng: number }) => {
   const map = useMap();
+
+  useEffect(() => {
+    // Set zoom limits
+    map.setMinZoom(4); // Allow state/province level view, prevent excessive zoom out
+    map.setMaxZoom(18); // Maximum zoom level
+  }, [map]);
+
   useEffect(() => {
     map.flyTo([lat, lng], 16);
   }, [lat, lng, map]);
@@ -58,8 +66,13 @@ const ChooseLocation = () => {
     setIsLoading(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        `http://localhost:3001/api/reverse-geocode?lat=${lat}&lon=${lng}`
       );
+
+      if (!response.ok) {
+        throw new Error(`Geocoding failed: ${response.status}`);
+      }
+
       const data = await response.json();
 
       setLocation({
@@ -73,6 +86,12 @@ const ChooseLocation = () => {
           'lastLocation',
           JSON.stringify({ address: data.display_name || 'Unknown Location', lat, lng })
         );
+        // Cache location in history
+        await addLocationHistory({
+          latitude: lat,
+          longitude: lng,
+          address: data.display_name || 'Unknown Location'
+        });
       } catch (e) {
         // Ignore storage errors
       }
@@ -87,6 +106,7 @@ const ChooseLocation = () => {
           JSON.stringify({ address: 'Selected Location', lat, lng })
         );
       } catch (e) { }
+      toast.error("Failed to fetch address, but coordinates saved");
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +138,13 @@ const ChooseLocation = () => {
     setIsLoading(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`
+        `http://localhost:3001/api/search-location?q=${encodeURIComponent(searchQuery)}`
       );
+
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data && data.length > 0) {
@@ -145,10 +170,16 @@ const ChooseLocation = () => {
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     // Persist chosen location and return to report form
     try {
       localStorage.setItem('lastLocation', JSON.stringify({ address: location.address, lat: location.lat, lng: location.lng }));
+      // Cache location in history
+      await addLocationHistory({
+        latitude: location.lat,
+        longitude: location.lng,
+        address: location.address
+      });
     } catch (e) { }
     navigate("/report", {
       state: {
@@ -163,30 +194,30 @@ const ChooseLocation = () => {
   return (
     <div className="mobile-container min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 bg-background z-20 px-6 py-4 border-b border-border">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
-            <ArrowLeft size={24} className="text-foreground" />
+      <div className="sticky top-0 bg-background z-20 px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 hover:bg-muted rounded-lg transition-colors">
+            <ArrowLeft size={22} className="text-foreground" />
           </button>
-          <h1 className="text-xl font-bold text-foreground">Choose Location</h1>
+          <h1 className="text-lg font-bold text-foreground">Choose Location</h1>
         </div>
       </div>
 
       {/* Search */}
-      <div className="px-6 py-4 z-10">
+      <div className="px-4 py-3 z-10">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
           <input
             type="text"
             placeholder="Search address or landmark..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="input-field pl-12 pr-12"
+            className="w-full bg-muted/50 border border-border rounded-xl pl-10 pr-10 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
           />
           {isLoading && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2">
-              <Loader2 size={20} className="animate-spin text-primary" />
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+              <Loader2 size={18} className="animate-spin text-primary" />
             </div>
           )}
         </div>
@@ -214,39 +245,39 @@ const ChooseLocation = () => {
         {/* Current Location Button */}
         <button
           onClick={handleCurrentLocation}
-          className="absolute bottom-4 right-4 w-12 h-12 bg-background rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors z-[1000]"
+          className="absolute bottom-4 right-4 w-11 h-11 bg-background rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors z-[1000]"
           disabled={isLoading}
         >
           {isLoading ? (
-            <Loader2 size={24} className="animate-spin text-primary" />
+            <Loader2 size={20} className="animate-spin text-primary" />
           ) : (
-            <LocateFixed size={24} className="text-primary" />
+            <LocateFixed size={20} className="text-primary" />
           )}
         </button>
       </div>
 
       {/* Location Info */}
-      <div className="px-6 py-4 bg-background">
-        <p className="text-sm text-muted-foreground text-center mb-4">
-          Tap on the map or search to set location
+      <div className="px-4 py-2.5 bg-background">
+        <p className="text-[10px] text-muted-foreground text-center mb-2">
+          Tap on map or search location
         </p>
 
-        <div className="card-elevated mb-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <LocateFixed size={16} className="text-primary" />
+        <div className="bg-card rounded-lg p-2 shadow-sm border border-border mb-2.5">
+          <div className="flex items-start gap-2 mb-1">
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <LocateFixed size={12} className="text-primary" />
             </div>
-            <span className="font-medium text-foreground line-clamp-2">{location.address}</span>
+            <span className="text-xs font-medium text-foreground line-clamp-2 leading-tight">{location.address}</span>
           </div>
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Lat: {location.lat.toFixed(4)}, Lng: {location.lng.toFixed(4)}</span>
-            <span className="text-primary font-medium">Accuracy: High</span>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground pl-8">
+            <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
+            <span className="text-primary font-medium">High Accuracy</span>
           </div>
         </div>
 
         <button
           onClick={handleConfirm}
-          className="btn-primary"
+          className="bg-primary text-primary-foreground font-semibold py-2 px-5 rounded-lg w-full transition-all active:scale-[0.98] text-xs"
         >
           Confirm Location
         </button>

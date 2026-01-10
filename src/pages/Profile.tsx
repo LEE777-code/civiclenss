@@ -1,13 +1,97 @@
 import { useNavigate } from "react-router-dom";
 import { User, FileText, Edit, Moon, Bell, HelpCircle, LogOut, ChevronRight } from "lucide-react";
-import { useUser, SignOutButton } from "@clerk/clerk-react";
+import { useUser, SignOutButton, useClerk } from "@clerk/clerk-react";
 import BottomNav from "@/components/BottomNav";
 import { useTheme } from "@/hooks/use-theme";
 import SwipeWrapper from "@/components/SwipeWrapper";
+import { clearAuthState } from "@/services/authService";
+import { clearOfflineCache, cacheUserProfile, getCachedUserProfile, getCachedReportStats } from "@/services/offlineService";
+import { useEffect, useState } from "react";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { supabase } from "@/lib/supabase";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { signOut } = useClerk();
+  const isOnline = useOnlineStatus();
+  const [reportCounts, setReportCounts] = useState({ pending: 0, resolved: 0 });
+
+  // Cache user profile when user data is available
+  useEffect(() => {
+    const cacheProfile = async () => {
+      if (user && isOnline) {
+        await cacheUserProfile({
+          user_id: user.id,
+          full_name: user.fullName || undefined,
+          email: user.primaryEmailAddress?.emailAddress || undefined,
+          image_url: user.imageUrl || undefined
+        });
+      }
+    };
+    cacheProfile();
+  }, [user, isOnline]);
+
+  // Fetch report counts
+  useEffect(() => {
+    const fetchReportCounts = async () => {
+      // Try cached data first
+      const cachedStats = await getCachedReportStats();
+      if (cachedStats) {
+        setReportCounts({
+          pending: cachedStats.pending_count,
+          resolved: cachedStats.resolved_count
+        });
+      }
+
+      // Fetch fresh data if online
+      if (isOnline && user) {
+        try {
+          const { count: pendingCount } = await supabase
+            .from('reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('status', 'pending');
+
+          const { count: resolvedCount } = await supabase
+            .from('reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('status', 'resolved');
+
+          setReportCounts({
+            pending: pendingCount || 0,
+            resolved: resolvedCount || 0
+          });
+        } catch (error) {
+          console.error('Error fetching report counts:', error);
+        }
+      }
+    };
+
+    fetchReportCounts();
+  }, [user, isOnline]);
+
+  const handleLogout = async () => {
+    try {
+      // Clear auth state
+      clearAuthState();
+
+      // Clear offline cache
+      await clearOfflineCache();
+
+      // Sign out from Clerk
+      await signOut();
+
+      // Navigate to login
+      navigate("/login");
+    } catch (error) {
+      console.error("Error during logout:", error);
+      // Even if there's an error, clear local state and navigate
+      clearAuthState();
+      navigate("/login");
+    }
+  };
 
   const menuItems = [
     { icon: Moon, label: "Dark Mode", type: "toggle" },
@@ -53,7 +137,7 @@ const Profile = () => {
             </div>
             <div className="text-left">
               <h3 className="font-semibold text-foreground">My Reports</h3>
-              <p className="text-sm text-muted-foreground">5 Pending, 2 Resolved</p>
+              <p className="text-sm text-muted-foreground">{reportCounts.pending} Pending, {reportCounts.resolved} Resolved</p>
             </div>
           </div>
           <ChevronRight size={20} className="text-muted-foreground" />
@@ -107,14 +191,13 @@ const Profile = () => {
         </div>
 
         {/* Logout */}
-        <SignOutButton>
-          <button
-            className="card-elevated w-full flex items-center gap-3 text-red-500"
-          >
-            <LogOut size={20} />
-            <span className="font-medium">Logout</span>
-          </button>
-        </SignOutButton>
+        <button
+          onClick={handleLogout}
+          className="card-elevated w-full flex items-center gap-3 text-red-500"
+        >
+          <LogOut size={20} />
+          <span className="font-medium">Logout</span>
+        </button>
       </div>
 
       <BottomNav />

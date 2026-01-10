@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, ArrowUpDown, Lightbulb, Trash2, Paintbrush, Check, X, AlertTriangle, Download } from "lucide-react";
+import { ArrowLeft, Search, Filter, ArrowUpDown, Check, X, Download } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
-
+import { getCategoryIcon } from "@/utils/categoryIcons";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { cacheMyReports, getCachedMyReports } from "@/services/offlineService";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect } from "react";
@@ -12,6 +14,7 @@ import { toast } from "sonner";
 const MyReports = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const isOnline = useOnlineStatus();
   const [reports, setReports] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -21,6 +24,7 @@ const MyReports = () => {
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
 
   const fetchMyReports = async () => {
+    console.log('🔍 MyReports: fetchMyReports called, isOnline:', isOnline);
     // Get user ID from Clerk or localStorage (anonymous)
     let userId = user?.id;
     if (!userId) {
@@ -29,39 +33,86 @@ const MyReports = () => {
 
     if (!userId) {
       console.log('No user ID found');
+      // When offline and no user ID, show cached reports
+      if (!isOnline) {
+        const cachedData = await getCachedMyReports();
+        if (cachedData.length > 0) {
+          setReports(cachedData.map((report: any) => ({
+            id: report.id,
+            title: report.title,
+            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            category: report.category,
+            location: report.location_name || "Unknown Location",
+            date: new Date(report.created_at).toLocaleDateString(),
+            image: report.image_url,
+            resolved_image_url: report.resolved_image_url,
+            description: report.description,
+            createdAt: report.created_at,
+            upvotes: report.upvotes || 0,
+            icon: getCategoryIcon(report.category || "Other"),
+          })));
+        }
+      }
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      if (isOnline) {
+        console.log('🌐 MyReports: Fetching from Supabase for user:', userId);
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching reports:', error);
-        return;
-      }
+        if (error) {
+          console.error('Error fetching reports:', error);
+          return;
+        }
 
-      if (data) {
-        setReports(data.map(report => ({
-          id: report.id,
-          title: report.title,
-          status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
-          severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-          category: report.category,
-          location: report.location_name || "Unknown Location",
-          date: new Date(report.created_at).toLocaleDateString(),
-          image: report.image_url,
-          resolved_image_url: report.resolved_image_url,
-          description: report.description,
-          createdAt: report.created_at,
-          upvotes: report.upvotes || 0,
-          icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
-            report.category === 'Garbage & Cleanliness' ? Trash2 :
-              report.category === 'Road Issues' ? AlertTriangle : Paintbrush,
-        })));
+        console.log('📊 MyReports: Received data:', data?.length, 'reports');
+        if (data) {
+          setReports(data.map(report => ({
+            id: report.id,
+            title: report.title,
+            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            category: report.category,
+            location: report.location_name || "Unknown Location",
+            date: new Date(report.created_at).toLocaleDateString(),
+            image: report.image_url,
+            resolved_image_url: report.resolved_image_url,
+            description: report.description,
+            createdAt: report.created_at,
+            upvotes: report.upvotes || 0,
+            icon: getCategoryIcon(report.category || "Other"),
+          })));
+
+          // Cache for offline use
+          await cacheMyReports(data);
+        }
+      } else {
+        // Load from cache when offline - show all cached reports
+        // Note: We can't filter by user_id offline without storing it in cache
+        const cachedData = await getCachedMyReports();
+        if (cachedData.length > 0) {
+          setReports(cachedData.map((report: any) => ({
+            id: report.id,
+            title: report.title,
+            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+            category: report.category,
+            location: report.location_name || "Unknown Location",
+            date: new Date(report.created_at).toLocaleDateString(),
+            image: report.image_url,
+            resolved_image_url: report.resolved_image_url,
+            description: report.description,
+            createdAt: report.created_at,
+            upvotes: report.upvotes || 0,
+            icon: getCategoryIcon(report.category || "Other"),
+          })));
+        }
       }
     } catch (error) {
       console.error("Error fetching my reports:", error);
@@ -71,26 +122,28 @@ const MyReports = () => {
   useEffect(() => {
     fetchMyReports();
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('my-reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'reports',
-        },
-        () => {
-          fetchMyReports();
-        }
-      )
-      .subscribe();
+    // Set up real-time subscription only when online
+    if (isOnline) {
+      const channel = supabase
+        .channel('my-reports')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'reports',
+          },
+          () => {
+            fetchMyReports();
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user, isOnline]);
 
   const getStatusStyle = (status: string) => {
     switch (status) {

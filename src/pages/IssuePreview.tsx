@@ -5,6 +5,23 @@ import { toast } from "sonner";
 import sampleImage from "@/assets/pages/page_1.jpg";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/clerk-react";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import ImageModal from "@/components/ImageModal";
+
+// Fix for default Leaflet marker icons in React/Vite
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
 
 const IssuePreview = () => {
   const navigate = useNavigate();
@@ -12,6 +29,7 @@ const IssuePreview = () => {
   const { user } = useUser();
   const [submitting, setSubmitting] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("");
+  const [imageModalOpen, setImageModalOpen] = useState(false);
 
   const formData = location.state || {
     title: "Large Pothole on Main St",
@@ -128,94 +146,140 @@ const IssuePreview = () => {
         </div>
       </div>
 
-      {/* Large Image */}
-      <div className="px-6 pt-4">
-        <div className="w-full h-64 bg-gradient-to-br from-primary/15 to-primary/8 rounded-3xl overflow-hidden flex items-center justify-center shadow-md">
+      {/* Content Container with spacing */}
+      <div className="px-6 pt-2 pb-6 space-y-5">
+        {/* Large Image */}
+        <div className="w-full h-72 bg-gradient-to-br from-primary/15 to-primary/8 rounded-2xl overflow-hidden shadow-lg">
           {imagePreviewUrl ? (
             <img
               src={imagePreviewUrl}
               alt="Issue"
-              className="object-cover w-full h-full"
+              className="object-cover w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
+              onClick={() => setImageModalOpen(true)}
               onError={(e) => {
                 // fallback to sample image if error
                 (e.currentTarget as HTMLImageElement).src = sampleImage;
               }}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <AlertTriangle size={48} className="mb-2" />
               <p className="text-sm">No image available</p>
             </div>
           )}
         </div>
-        <div className="card-elevated">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <h2 className="text-xl font-bold text-foreground mb-2">{formData.title}</h2>
-              <p className="text-muted-foreground mb-3">{formData.description}</p>
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-sm font-medium">Road Damage</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${formData.severity === "High" ? "severity-high" : formData.severity === "Medium" ? "severity-medium" : "severity-low"
-                  }`}>{formData.severity} Severity</span>
-              </div>
-            </div>
-            <button onClick={() => navigate("/report", { state: formData })} className="text-primary text-sm font-medium">Edit</button>
+
+        {/* Title and Description Card */}
+        <div className="bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-foreground flex-1">{formData.title}</h2>
+            <button
+              onClick={() => navigate("/report", { state: formData })}
+              className="text-primary text-sm font-medium hover:underline flex items-center gap-1"
+            >
+              <Edit size={16} />
+              Edit
+            </button>
+          </div>
+
+          <p className="text-muted-foreground text-sm leading-relaxed mb-4">{formData.description}</p>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-4 py-1.5 bg-secondary/50 text-foreground rounded-full text-xs font-medium">
+              {formData.category}
+            </span>
+            <span className={`px-4 py-1.5 rounded-full text-xs font-semibold ${formData.severity === "High" ? "severity-high" :
+              formData.severity === "Medium" ? "severity-medium" :
+                "severity-low"
+              }`}>
+              {formData.severity} Severity
+            </span>
           </div>
         </div>
 
         {/* Map / Location Card */}
-        <div className="card-elevated">
-          <div className="h-36 bg-secondary/30 rounded-xl mb-4 text-center flex items-center justify-center text-muted-foreground">Map Preview</div>
-          <h3 className="text-sm font-semibold text-foreground mb-2">Location</h3>
-          <p className="text-foreground font-semibold">{formData.location}</p>
-          <p className="text-xs text-muted-foreground mt-1">
+        <div className="bg-card rounded-2xl p-5 shadow-sm border border-border/50">
+          <div className="flex items-center gap-2 mb-3">
+            <MapPin size={18} className="text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Location</h3>
+          </div>
+
+          <div className="h-40 bg-secondary/30 rounded-xl mb-4 overflow-hidden">
+            {formData.latitude && formData.longitude ? (
+              <MapContainer
+                center={[parseFloat(formData.latitude), parseFloat(formData.longitude)]}
+                zoom={15}
+                style={{ height: "100%", width: "100%" }}
+                zoomControl={false}
+                dragging={false}
+                scrollWheelZoom={false}
+                doubleClickZoom={false}
+                touchZoom={false}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <Marker position={[parseFloat(formData.latitude), parseFloat(formData.longitude)]} />
+              </MapContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                Map Preview - No coordinates available
+              </div>
+            )}
+          </div>
+
+          <p className="text-foreground font-medium mb-1">{formData.location}</p>
+          <p className="text-xs text-muted-foreground">
             {formData.latitude && formData.longitude
               ? `${parseFloat(formData.latitude).toFixed(4)}° N, ${parseFloat(formData.longitude).toFixed(4)}° W`
               : 'Coordinates not available'}
           </p>
         </div>
 
-        {/* Details */}
-        <div className="card-elevated space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        {/* Details Card */}
+        <div className="bg-card rounded-2xl p-5 shadow-sm border border-border/50 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Calendar size={18} className="text-primary" />
-              <div>
-                <div className="text-sm text-foreground font-medium">Date & Time</div>
-                <div className="text-sm text-muted-foreground">Oct 26, 10:45 AM</div>
-              </div>
+            </div>
+            <div className="flex-1">
+              <div className="text-sm text-foreground font-medium">Date & Time</div>
+              <div className="text-sm text-muted-foreground">Oct 26, 10:45 AM</div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="h-px bg-border/50" />
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Tag size={18} className="text-primary" />
-              <div>
-                <div className="text-sm text-foreground font-medium">Category</div>
-                <div className="text-sm text-muted-foreground">{formData.category}</div>
-              </div>
             </div>
-            <div className="text-sm text-muted-foreground" />
+            <div className="flex-1">
+              <div className="text-sm text-foreground font-medium">Category</div>
+              <div className="text-sm text-muted-foreground">{formData.category}</div>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="h-px bg-border/50" />
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Eye size={18} className="text-primary" />
-              <div>
-                <div className="text-sm text-foreground font-medium">Report Anonymously</div>
-                <div className="text-sm text-muted-foreground">{formData.anonymous ? "Yes" : "No"}</div>
-              </div>
             </div>
-            <div />
+            <div className="flex-1">
+              <div className="text-sm text-foreground font-medium">Report Anonymously</div>
+              <div className="text-sm text-muted-foreground">{formData.anonymous ? "Yes" : "No"}</div>
+            </div>
           </div>
         </div>
 
         {/* Submit button */}
-        <div className="">
+        <div className="pt-2">
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="btn-gradient flex items-center justify-center gap-2 disabled:opacity-70"
+            className="btn-gradient flex items-center justify-center gap-2 disabled:opacity-70 w-full"
           >
             {submitting ? (
               <>
@@ -228,10 +292,23 @@ const IssuePreview = () => {
           </button>
         </div>
 
-        <div className="text-center mt-2">
-          <button onClick={() => navigate("/report", { state: formData })} className="text-primary text-sm">Edit Details</button>
+        <div className="text-center pb-4">
+          <button
+            onClick={() => navigate("/report", { state: formData })}
+            className="text-primary text-sm font-medium hover:underline"
+          >
+            Edit Details
+          </button>
         </div>
       </div>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        imageUrl={imagePreviewUrl}
+        onClose={() => setImageModalOpen(false)}
+        altText="Issue Preview Image"
+      />
     </div >
   );
 };

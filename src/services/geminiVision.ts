@@ -91,7 +91,7 @@ export async function generateImageTitle(imageData: string | File): Promise<stri
         }
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash-preview-09-2025',
             contents: {
                 parts: [
                     { inlineData: { data: base64Content, mimeType: mimeType } },
@@ -129,7 +129,7 @@ export async function suggestCategory(imageData: string | File): Promise<string>
         const prompt = `Categorize this civic issue into ONE of: Road Issues, Garbage & Cleanliness, Water / Drainage, Streetlight / Electricity, Public Safety, Public Facilities, Parks & Environment, Other. Output ONLY the category name.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash-preview-09-2025',
             contents: {
                 parts: [
                     { inlineData: { data: base64Content, mimeType: mimeType } },

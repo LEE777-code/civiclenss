@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, ArrowUpDown, Zap, Construction, Droplets, TreePine, Check, AlertTriangle, Lightbulb } from "lucide-react";
+import { ArrowLeft, Search, Filter, ArrowUpDown, Check } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
-
+import { getCategoryIcon } from "@/utils/categoryIcons";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { cacheNearbyAlerts, getCachedNearbyAlerts } from "@/services/offlineService";
 import { supabase } from "@/lib/supabase";
 import { useEffect } from "react";
 
 const NearbyAlerts = () => {
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const [allAlerts, setAllAlerts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -19,29 +22,55 @@ const NearbyAlerts = () => {
 
   useEffect(() => {
     const fetchAlerts = async () => {
+      console.log('🔍 NearbyAlerts: fetchAlerts called, isOnline:', isOnline);
       try {
-        const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(20); // Fetch last 20 reports as alerts
+        if (isOnline) {
+          console.log('🌐 NearbyAlerts: Fetching from Supabase...');
+          const { data, error } = await supabase
+            .from('reports')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(20); // Fetch last 20 reports as alerts
 
-        if (data) {
-          setAllAlerts(data.map(report => ({
-            id: report.id,
-            title: report.title,
-            description: report.description || `${report.location_name} · 0.5 mi away`,
-            time: new Date(report.created_at).toLocaleDateString(),
-            icon: report.category === 'Streetlight / Electricity' ? Lightbulb :
-              report.category === 'Water / Drainage' ? Droplets :
-                report.category === 'Parks & Environment' ? TreePine : AlertTriangle,
-            color: report.severity === 'high' ? "bg-red-100" : "bg-amber-100",
-            iconColor: report.severity === 'high' ? "text-red-500" : "text-amber-500",
-            severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
-            status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
-            upvotes: report.upvotes || 0,
-            type: "Issue"
-          })));
+          console.log('📊 NearbyAlerts: Received data:', data?.length, 'reports');
+          if (data) {
+            setAllAlerts(data.map(report => ({
+              id: report.id,
+              title: report.title,
+              description: report.description || `${report.location_name} · 0.5 mi away`,
+              time: new Date(report.created_at).toLocaleDateString(),
+              category: report.category,
+              icon: getCategoryIcon(report.category || "Other"),
+              color: report.severity === 'high' ? "bg-red-100" : "bg-amber-100",
+              iconColor: report.severity === 'high' ? "text-red-500" : "text-amber-500",
+              severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+              status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+              upvotes: report.upvotes || 0,
+              type: "Issue"
+            })));
+
+            // Cache for offline use
+            await cacheNearbyAlerts(data);
+          }
+        } else {
+          // Load from cache when offline
+          const cachedData = await getCachedNearbyAlerts();
+          if (cachedData.length > 0) {
+            setAllAlerts(cachedData.slice(0, 20).map((report: any) => ({
+              id: report.id,
+              title: report.title,
+              description: report.description || `${report.location_name} · 0.5 mi away`,
+              time: new Date(report.created_at).toLocaleDateString(),
+              category: report.category,
+              icon: getCategoryIcon(report.category || "Other"),
+              color: report.severity === 'high' ? "bg-red-100" : "bg-amber-100",
+              iconColor: report.severity === 'high' ? "text-red-500" : "text-amber-500",
+              severity: report.severity.charAt(0).toUpperCase() + report.severity.slice(1),
+              status: report.status.charAt(0).toUpperCase() + report.status.slice(1),
+              upvotes: report.upvotes || 0,
+              type: "Issue"
+            })));
+          }
         }
       } catch (error) {
         console.error("Error fetching alerts:", error);
@@ -49,7 +78,7 @@ const NearbyAlerts = () => {
     };
 
     fetchAlerts();
-  }, []);
+  }, [isOnline]);
 
   const toggleFilter = (list: string[], item: string, setList: (l: string[]) => void) => {
     if (list.includes(item)) {

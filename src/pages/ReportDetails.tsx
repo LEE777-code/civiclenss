@@ -5,6 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { toggleUpvote, hasUserUpvoted } from "@/services/upvoteService";
 import { toast } from "sonner";
+import ImageModal from "@/components/ImageModal";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { getCachedReportById } from "@/services/offlineService";
 
 interface ProgressStep {
   label: string;
@@ -35,56 +38,100 @@ interface Report {
 const ReportDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const isOnline = useOnlineStatus();
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [upvoting, setUpvoting] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
 
   const fetchReport = async () => {
     if (!id) return;
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('id', id)
-        .single();
+      if (isOnline) {
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('id', id)
+          .single();
 
-      if (data) {
-        setReport({
-          id: data.id,
-          title: data.title,
-          category: data.category,
-          severity: data.severity.charAt(0).toUpperCase() + data.severity.slice(1),
-          description: data.description,
-          status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
-          date: new Date(data.created_at).toLocaleString(),
-          location: data.location_name || "Unknown Location",
-          image: data.image_url || null, // Add the image URL
-          upvotes: data.upvotes || 0,
-          viewedByAdmin: data.viewed_by_admin || false,
-          adminViewedAt: data.admin_viewed_at ? new Date(data.admin_viewed_at).toLocaleString() : null,
-          resolvedBy: data.resolved_by || null,
-          resolvedAt: data.resolved_at ? new Date(data.resolved_at).toLocaleString() : null,
-          progress: [
-            {
-              label: "Submitted",
-              time: new Date(data.created_at).toLocaleString(),
-              completed: true
-            },
-            {
-              label: "Viewed by Admin",
-              time: data.admin_viewed_at ? new Date(data.admin_viewed_at).toLocaleString() : "Pending",
-              completed: data.viewed_by_admin || false,
-              badge: data.viewed_by_admin ? "Seen" : "Not yet viewed"
-            },
-            {
-              label: "Resolved",
-              time: data.resolved_at ? new Date(data.resolved_at).toLocaleString() : "Pending",
-              completed: data.status === 'resolved',
-              resolvedBy: data.resolved_by
-            },
-          ],
-        });
+        if (data) {
+          setReport({
+            id: data.id,
+            title: data.title,
+            category: data.category,
+            severity: data.severity.charAt(0).toUpperCase() + data.severity.slice(1),
+            description: data.description,
+            status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
+            date: new Date(data.created_at).toLocaleString(),
+            location: data.location_name || "Unknown Location",
+            image: data.image_url || null, // Add the image URL
+            upvotes: data.upvotes || 0,
+            viewedByAdmin: data.viewed_by_admin || false,
+            adminViewedAt: data.admin_viewed_at ? new Date(data.admin_viewed_at).toLocaleString() : null,
+            resolvedBy: data.resolved_by || null,
+            resolvedAt: data.resolved_at ? new Date(data.resolved_at).toLocaleString() : null,
+            progress: [
+              {
+                label: "Submitted",
+                time: new Date(data.created_at).toLocaleString(),
+                completed: true
+              },
+              {
+                label: "Viewed by Admin",
+                time: data.admin_viewed_at ? new Date(data.admin_viewed_at).toLocaleString() : "Pending",
+                completed: data.viewed_by_admin || false,
+                badge: data.viewed_by_admin ? "Seen" : "Not yet viewed"
+              },
+              {
+                label: "Resolved",
+                time: data.resolved_at ? new Date(data.resolved_at).toLocaleString() : "Pending",
+                completed: data.status === 'resolved',
+                resolvedBy: data.resolved_by
+              },
+            ],
+          });
+        }
+      } else {
+        // Load from cache when offline
+        const cachedData = await getCachedReportById(id);
+        if (cachedData) {
+          setReport({
+            id: cachedData.id,
+            title: cachedData.title,
+            category: cachedData.category,
+            severity: cachedData.severity.charAt(0).toUpperCase() + cachedData.severity.slice(1),
+            description: cachedData.description,
+            status: cachedData.status.charAt(0).toUpperCase() + cachedData.status.slice(1),
+            date: new Date(cachedData.created_at).toLocaleString(),
+            location: cachedData.location_name || "Unknown Location",
+            image: cachedData.image_url || null,
+            upvotes: cachedData.upvotes || 0,
+            viewedByAdmin: cachedData.viewed_by_admin || false,
+            adminViewedAt: cachedData.admin_viewed_at ? new Date(cachedData.admin_viewed_at).toLocaleString() : null,
+            resolvedBy: cachedData.resolved_by || null,
+            resolvedAt: cachedData.resolved_at ? new Date(cachedData.resolved_at).toLocaleString() : null,
+            progress: [
+              {
+                label: "Submitted",
+                time: new Date(cachedData.created_at).toLocaleString(),
+                completed: true
+              },
+              {
+                label: "Viewed by Admin",
+                time: cachedData.admin_viewed_at ? new Date(cachedData.admin_viewed_at).toLocaleString() : "Pending",
+                completed: cachedData.viewed_by_admin || false,
+                badge: cachedData.viewed_by_admin ? "Seen" : "Not yet viewed"
+              },
+              {
+                label: "Resolved",
+                time: cachedData.resolved_at ? new Date(cachedData.resolved_at).toLocaleString() : "Pending",
+                completed: cachedData.status === 'resolved',
+                resolvedBy: cachedData.resolved_by
+              },
+            ],
+          });
+        }
       }
     } catch (error) {
       console.error("Error fetching report details:", error);
@@ -96,9 +143,9 @@ const ReportDetails = () => {
   useEffect(() => {
     fetchReport();
 
-    if (!id) return;
+    if (!id || !isOnline) return;
 
-    // Set up real-time subscription for this specific report
+    // Set up real-time subscription for this specific report only when online
     const channel = supabase
       .channel(`report-${id}`)
       .on(
@@ -120,7 +167,7 @@ const ReportDetails = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, fetchReport]);
+  }, [id, isOnline]);
 
   useEffect(() => {
     // Check if user has already upvoted this report
@@ -130,7 +177,12 @@ const ReportDetails = () => {
   }, [id]);
 
   const handleUpvote = async () => {
-    if (!id || upvoting) return;
+    if (!id || upvoting || !isOnline) {
+      if (!isOnline) {
+        toast.error("Upvoting requires an internet connection");
+      }
+      return;
+    }
 
     setUpvoting(true);
     const { data, error, upvoted, upvotes } = await toggleUpvote(id);
@@ -183,7 +235,8 @@ const ReportDetails = () => {
           <img
             src={report.image}
             alt={report.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => setImageModalOpen(true)}
             onError={(e) => {
               // Fallback to icon if image fails to load
               const parent = e.currentTarget.parentElement;
@@ -245,12 +298,11 @@ const ReportDetails = () => {
             </span>
             <button
               onClick={handleUpvote}
-              disabled={upvoting}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                hasUpvoted
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              disabled={upvoting || !isOnline}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${hasUpvoted
+                ? 'bg-primary/20 text-primary'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
               <ThumbsUp size={14} fill={hasUpvoted ? "currentColor" : "none"} />
               {report.upvotes || 0}
@@ -331,6 +383,14 @@ const ReportDetails = () => {
           Contact Support
         </button>
       </div>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        imageUrl={report.image}
+        onClose={() => setImageModalOpen(false)}
+        altText={report.title}
+      />
     </div>
   );
 };

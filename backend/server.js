@@ -48,6 +48,92 @@ app.get('/health', (req, res) => {
 
 // --- Routes removed (Resolution & PDF) per user request to revert ---
 
+// Geocoding API Endpoints
+/**
+ * Reverse geocoding: lat/lon → address
+ * Proxies requests to Nominatim with proper User-Agent header
+ */
+app.get('/api/reverse-geocode', async (req, res) => {
+  const { lat, lon } = req.query;
+
+  if (!lat || !lon) {
+    return res.status(400).json({ error: 'lat and lon query parameters are required' });
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en`,
+      {
+        headers: {
+          // REQUIRED by OpenStreetMap Nominatim usage policy
+          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Nominatim reverse geocode failed: ${response.status}`);
+      return res.status(response.status).json({
+        error: 'Geocoding service request failed',
+        status: response.status
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+
+  } catch (err) {
+    console.error('Reverse geocode error:', err);
+    res.status(500).json({
+      error: 'Internal server error during reverse geocoding',
+      message: err.message
+    });
+  }
+});
+
+/**
+ * Search location by text query
+ * Proxies requests to Nominatim with proper User-Agent header
+ */
+app.get('/api/search-location', async (req, res) => {
+  const { q } = req.query;
+
+  if (!q) {
+    return res.status(400).json({ error: 'q query parameter is required' });
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&accept-language=en`,
+      {
+        headers: {
+          // REQUIRED by OpenStreetMap Nominatim usage policy
+          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Nominatim search failed: ${response.status}`);
+      return res.status(response.status).json({
+        error: 'Location search service request failed',
+        status: response.status
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+
+  } catch (err) {
+    console.error('Location search error:', err);
+    res.status(500).json({
+      error: 'Internal server error during location search',
+      message: err.message
+    });
+  }
+});
+
+
 // Send email endpoint
 app.post('/api/send-email', async (req, res) => {
   try {

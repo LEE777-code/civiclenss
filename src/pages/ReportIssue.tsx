@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Camera, MapPin, Eye, Sparkles } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Eye, Sparkles, WifiOff } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
 import { generateImageDescription, generateImageTitle, suggestCategory } from "@/services/geminiVision";
+import ImageModal from "@/components/ImageModal";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 
 const ReportIssue = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const isOnline = useOnlineStatus();
   const [formData, setFormData] = useState(location.state || {
     title: "",
     description: "",
@@ -23,6 +26,7 @@ const ReportIssue = () => {
   const [generating, setGenerating] = useState(false);
   const [showImageOptions, setShowImageOptions] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -74,7 +78,12 @@ const ReportIssue = () => {
 
           {selectedImage ? (
             <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-border">
-              <img src={selectedImage} alt="Issue" className="w-full h-full object-cover" />
+              <img
+                src={selectedImage}
+                alt="Issue"
+                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setImageModalOpen(true)}
+              />
               <button
                 onClick={() => setSelectedImage(null)}
                 className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
@@ -100,6 +109,17 @@ const ReportIssue = () => {
           <h2 className="text-lg font-semibold text-foreground mb-3">Issue Details</h2>
 
           <div className="space-y-4">
+            {/* Offline Warning */}
+            {!isOnline && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <WifiOff className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="font-medium text-amber-900">You're offline</p>
+                  <p className="text-sm text-amber-700 mt-0.5">Reports can only be submitted when online. You can draft your report now and submit it later.</p>
+                </div>
+              </div>
+            )}
+
             {/* AI Analyzing Indicator */}
             {isAnalyzing && (
               <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
@@ -131,6 +151,11 @@ const ReportIssue = () => {
                 <label className="sr-only">Description</label>
                 <button
                   onClick={async () => {
+                    if (!isOnline) {
+                      toast.error("AI analysis requires an internet connection");
+                      return;
+                    }
+
                     if (!selectedImage) {
                       toast.error("Please upload an image first");
                       return;
@@ -170,7 +195,7 @@ const ReportIssue = () => {
                     }
                   }}
                   className="text-sm text-primary font-medium ml-auto"
-                  disabled={generating || isAnalyzing}
+                  disabled={generating || isAnalyzing || !isOnline}
                 >
                   {generating ? "Analyzing..." : "Auto-fill with AI"}
                 </button>
@@ -317,6 +342,14 @@ const ReportIssue = () => {
           </div>
         </div>
       )}
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        imageUrl={selectedImage}
+        onClose={() => setImageModalOpen(false)}
+        altText="Report Issue Image"
+      />
     </SwipeWrapper>
   );
 };

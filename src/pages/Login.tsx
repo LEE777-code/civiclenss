@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, Eye, EyeOff, Mail, Lock, UserCog } from "lucide-react";
+import { Shield, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { SignInButton, useUser, useSignIn } from "@clerk/clerk-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { setAuthState } from "@/services/authService";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,6 +18,9 @@ const Login = () => {
     const checkProfile = async () => {
       if (isSignedIn && user) {
         try {
+          // Set auth state in localStorage
+          setAuthState(user.id);
+
           const { data, error } = await supabase
             .from('users')
             .select('profile_completed')
@@ -72,13 +76,6 @@ const Login = () => {
 
   return (
     <div className="mobile-container min-h-screen bg-background px-6 py-12 relative">
-      <button
-        onClick={() => navigate("/admin-login")}
-        className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors rounded-lg hover:bg-muted/50"
-      >
-        <UserCog size={18} />
-        Admin Login
-      </button>
 
       <div className="flex flex-col items-center mb-8">
         <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4">
