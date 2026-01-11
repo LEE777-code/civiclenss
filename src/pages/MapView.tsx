@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { cacheMapReports, getCachedMapReports } from "@/services/offlineService";
 
+// Backend URL - REQUIRED for geocoding
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
 // Fix for default Leaflet marker icons in React/Vite
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -41,7 +44,7 @@ const getSeverityIcon = (severity: string) => {
   });
 };
 
-// Geocode a location name using backend proxy
+// Geocode a location name using ONLY backend API
 const geocodeLocation = async (location: string) => {
   if (!location) return null;
   try {
@@ -50,16 +53,18 @@ const geocodeLocation = async (location: string) => {
     const cached = localStorage.getItem(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    // Use backend proxy endpoint instead of direct Nominatim call
-    const url = `http://localhost:3001/api/search-location?q=${encodeURIComponent(location)}`;
-    const res = await fetch(url);
+    // ONLY call backend API - no fallback to Nominatim
+    const response = await fetch(
+      `${BACKEND_URL}/api/search-location?q=${encodeURIComponent(location)}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
 
-    if (!res.ok) {
-      console.warn('Geocode API request failed:', res.status);
+    if (!response.ok) {
+      console.warn('Backend geocode failed:', response.status);
       return null;
     }
 
-    const json = await res.json();
+    const json = await response.json();
     if (Array.isArray(json) && json.length > 0) {
       const lat = parseFloat(json[0].lat);
       const lon = parseFloat(json[0].lon);

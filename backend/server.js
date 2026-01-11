@@ -9,10 +9,23 @@ dotenv.config();
 
 const app = express();
 
-// Supabase Configuration
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// Supabase Configuration - MUST use service role key for backend
+if (!process.env.SUPABASE_SERVICE_KEY) {
+  console.error('❌ CRITICAL: SUPABASE_SERVICE_KEY is missing in .env file');
+  console.error('Backend requires service role key for database write access');
+  throw new Error('SUPABASE_SERVICE_KEY is required for backend operations');
+}
+
+if (!process.env.SUPABASE_URL) {
+  console.error('❌ CRITICAL: SUPABASE_URL is missing in .env file');
+  throw new Error('SUPABASE_URL is required for backend operations');
+}
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+console.log('✅ Supabase initialized with service role key');
 
 // Multer Config
 // Multer Config removed
@@ -51,7 +64,8 @@ app.get('/health', (req, res) => {
 // Geocoding API Endpoints
 /**
  * Reverse geocoding: lat/lon → address
- * Proxies requests to Nominatim with proper User-Agent header
+ * Uses Supabase cache to reduce Nominatim API calls
+ * Checks cache for nearby coordinates (within ~1km) before calling Nominatim
  */
 app.get('/api/reverse-geocode', async (req, res) => {
   const { lat, lon } = req.query;
@@ -60,9 +74,60 @@ app.get('/api/reverse-geocode', async (req, res) => {
     return res.status(400).json({ error: 'lat and lon query parameters are required' });
   }
 
+  const latitude = parseFloat(lat);
+  const longitude = parseFloat(lon);
+
+  if (isNaN(latitude) || isNaN(longitude)) {
+    return res.status(400).json({ error: 'lat and lon must be valid numbers' });
+  }
+
+  console.log(`🔍 Reverse geocode request: lat=${latitude}, lon=${longitude}`);
+
   try {
+    // Cache proximity matching: ~200m radius for civic reporting use case
+    // Small enough to be accurate, large enough for efficient caching
+    const radius = 0.002; // ~200 meters
+    const minLat = latitude - radius;
+    const maxLat = latitude + radius;
+    const minLon = longitude - radius;
+    const maxLon = longitude + radius;
+
+    // Check cache for nearby coordinates
+    console.log(`🔎 Checking cache within ~200m: lat [${minLat.toFixed(4)}, ${maxLat.toFixed(4)}], lon [${minLon.toFixed(4)}, ${maxLon.toFixed(4)}]`);
+    const { data: cachedResults, error: cacheError } = await supabase
+      .from('reverse_geocache')
+      .select('*')
+      .gte('lat', minLat)
+      .lte('lat', maxLat)
+      .gte('lon', minLon)
+      .lte('lon', maxLon)
+      .limit(1);
+
+    if (cacheError) {
+      console.error('❌ Cache lookup error:', cacheError);
+      // Continue to Nominatim if cache fails
+    }
+
+    // If we found a cached result, return it with the CACHED coordinates
+    if (cachedResults && cachedResults.length > 0) {
+      console.log('✅ Cache HIT! Returning cached result:', {
+        cached_lat: cachedResults[0].lat,
+        cached_lon: cachedResults[0].lon,
+        address: cachedResults[0].address.substring(0, 50) + '...'
+      });
+      return res.json({
+        display_name: cachedResults[0].address,
+        lat: cachedResults[0].lat.toString(),
+        lon: cachedResults[0].lon.toString(),
+        cached: true
+      });
+    }
+
+    console.log('❌ Cache MISS - calling Nominatim API');
+
+    // Cache miss - call Nominatim API
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=en`,
       {
         headers: {
           // REQUIRED by OpenStreetMap Nominatim usage policy
@@ -72,7 +137,7 @@ app.get('/api/reverse-geocode', async (req, res) => {
     );
 
     if (!response.ok) {
-      console.error(`Nominatim reverse geocode failed: ${response.status}`);
+      console.error(`❌ Nominatim reverse geocode failed: ${response.status}`);
       return res.status(response.status).json({
         error: 'Geocoding service request failed',
         status: response.status
@@ -80,14 +145,88 @@ app.get('/api/reverse-geocode', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('✅ Nominatim response received:', data.display_name?.substring(0, 50) + '...');
+
+    // Store in cache asynchronously
+    console.log('💾 Attempting to cache result...');
+    supabase
+      .from('reverse_geocache')
+      .insert({
+        lat: latitude,
+        lon: longitude,
+        address: data.display_name || 'Unknown Location'
+      })
+      .then(({ data: insertData, error: insertError }) => {
+        if (insertError) {
+          console.error('❌ FAILED to cache geocode result:', {
+            error: insertError,
+            code: insertError.code,
+            message: insertError.message,
+            details: insertError.details
+          });
+        } else {
+          console.log('✅ Successfully cached geocode result to database');
+        }
+      });
+
     res.json(data);
 
   } catch (err) {
-    console.error('Reverse geocode error:', err);
+    console.error('❌ Reverse geocode error:', err);
     res.status(500).json({
       error: 'Internal server error during reverse geocoding',
       message: err.message
     });
+  }
+});
+
+// Cache management endpoints for debugging
+/**
+ * Clear all geocoding cache
+ */
+app.post('/api/clear-cache', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('reverse_geocache')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+
+    if (error) {
+      console.error('❌ Failed to clear cache:', error);
+      return res.status(500).json({ error: 'Failed to clear cache', details: error.message });
+    }
+
+    console.log('🗑️ Cache cleared successfully');
+    res.json({ success: true, message: 'Cache cleared successfully' });
+  } catch (err) {
+    console.error('❌ Error clearing cache:', err);
+    res.status(500).json({ error: 'Internal server error', message: err.message });
+  }
+});
+
+/**
+ * View cache contents for debugging
+ */
+app.get('/api/view-cache', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('reverse_geocache')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.error('❌ Failed to fetch cache:', error);
+      return res.status(500).json({ error: 'Failed to fetch cache', details: error.message });
+    }
+
+    res.json({
+      count: data?.length || 0,
+      entries: data
+    });
+  } catch (err) {
+    console.error('❌ Error fetching cache:', err);
+    res.status(500).json({ error: 'Internal server error', message: err.message });
   }
 });
 

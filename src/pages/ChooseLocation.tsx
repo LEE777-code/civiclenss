@@ -7,6 +7,9 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { addLocationHistory } from "@/services/offlineService";
 
+// Backend URL - REQUIRED for geocoding
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
 // Fix for default Leaflet marker icons
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -65,16 +68,20 @@ const ChooseLocation = () => {
   const updateLocation = async (lat: number, lng: number) => {
     setIsLoading(true);
     try {
+      // ONLY call backend API - no fallback to Nominatim
       const response = await fetch(
-        `http://localhost:3001/api/reverse-geocode?lat=${lat}&lon=${lng}`
+        `${BACKEND_URL}/api/reverse-geocode?lat=${lat}&lon=${lng}`,
+        { signal: AbortSignal.timeout(8000) } // 8 second timeout
       );
 
       if (!response.ok) {
-        throw new Error(`Geocoding failed: ${response.status}`);
+        throw new Error(`Backend geocoding failed: ${response.status}`);
       }
 
       const data = await response.json();
 
+      // Backend only provides ADDRESS - use clicked/GPS coords for positioning
+      // Clicked coords are ALWAYS more accurate than cached approximate coords
       setLocation({
         address: data.display_name || "Unknown Location",
         lat: lat,
@@ -106,7 +113,7 @@ const ChooseLocation = () => {
           JSON.stringify({ address: 'Selected Location', lat, lng })
         );
       } catch (e) { }
-      toast.error("Failed to fetch address, but coordinates saved");
+      toast.error("Failed to fetch address. Please check backend connection.");
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +135,11 @@ const ChooseLocation = () => {
         console.error("Geolocation error:", error);
         toast.error("Failed to get current location");
         setIsLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
       }
     );
   };
@@ -137,12 +149,14 @@ const ChooseLocation = () => {
 
     setIsLoading(true);
     try {
+      // ONLY call backend API - no fallback to Nominatim
       const response = await fetch(
-        `http://localhost:3001/api/search-location?q=${encodeURIComponent(searchQuery)}`
+        `${BACKEND_URL}/api/search-location?q=${encodeURIComponent(searchQuery)}`,
+        { signal: AbortSignal.timeout(8000) } // 8 second timeout
       );
 
       if (!response.ok) {
-        throw new Error(`Search failed: ${response.status}`);
+        throw new Error(`Backend search failed: ${response.status}`);
       }
 
       const data = await response.json();
@@ -164,7 +178,7 @@ const ChooseLocation = () => {
       }
     } catch (error) {
       console.error("Error searching location:", error);
-      toast.error("Failed to search location");
+      toast.error("Failed to search location. Please check backend connection.");
     } finally {
       setIsLoading(false);
     }
