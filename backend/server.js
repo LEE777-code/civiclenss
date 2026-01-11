@@ -125,13 +125,14 @@ app.get('/api/reverse-geocode', async (req, res) => {
 
     console.log('❌ Cache MISS - calling Nominatim API');
 
-    // Cache miss - call Nominatim API
+    // Cache miss - call Nominatim API with STRICT English language enforcement
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=en`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=en,en-US&addressdetails=1&extratags=0`,
       {
         headers: {
           // REQUIRED by OpenStreetMap Nominatim usage policy
-          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)'
+          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       }
     );
@@ -242,12 +243,14 @@ app.get('/api/search-location', async (req, res) => {
   }
 
   try {
+    // STRICT English language enforcement for search results
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&accept-language=en`,
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&accept-language=en,en-US&addressdetails=1&extratags=0`,
       {
         headers: {
           // REQUIRED by OpenStreetMap Nominatim usage policy
-          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)'
+          'User-Agent': 'CivicLens/1.0 (civic.lens.app@gmail.com)',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       }
     );

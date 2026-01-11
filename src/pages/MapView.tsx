@@ -12,7 +12,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { cacheMapReports, getCachedMapReports } from "@/services/offlineService";
 
 // Backend URL - REQUIRED for geocoding
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://civiclens-r87i.onrender.com';
 
 // Fix for default Leaflet marker icons in React/Vite
 import icon from 'leaflet/dist/images/marker-icon.png';
