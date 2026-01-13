@@ -55,10 +55,10 @@ const Home = () => {
         // Fetch nearby issues - Only show pending reports (not resolved/rejected)
         const { data, error } = await supabase
           .from('reports')
-          .select('*')
+          .select('id, title, severity, location_name, category, created_at, upvotes')
           .eq('status', 'pending')  // Only show pending reports
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(30); // Only load 30 most recent reports
 
         if (data) {
           const formattedReports = data.map(report => ({
@@ -79,12 +79,12 @@ const Home = () => {
         // Fetch counts
         const { count: pendingCount } = await supabase
           .from('reports')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('status', 'pending');
 
         const { count: resolvedCount } = await supabase
           .from('reports')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('status', 'resolved');
 
         const newStats = {
@@ -122,7 +122,6 @@ const Home = () => {
             table: 'reports'
           },
           (payload) => {
-            console.log('Real-time update received:', payload);
             // Refetch data when any change occurs
             fetchReports();
           }

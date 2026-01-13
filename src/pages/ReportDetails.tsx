@@ -51,7 +51,7 @@ const ReportDetails = () => {
       if (isOnline) {
         const { data, error } = await supabase
           .from('reports')
-          .select('*')
+          .select('id, title, category, severity, description, status, created_at, location_name, image_url, upvotes, viewed_by_admin, admin_viewed_at, resolved_by, resolved_at')
           .eq('id', id)
           .single();
 

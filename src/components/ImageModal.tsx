@@ -13,6 +13,8 @@ const ImageModal = ({ isOpen, imageUrl, onClose, altText = "Full screen image" }
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null);
+    const [initialZoom, setInitialZoom] = useState(1);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const MIN_ZOOM = 0.5;
@@ -65,7 +67,61 @@ const ImageModal = ({ isOpen, imageUrl, onClose, altText = "Full screen image" }
         };
     }, [isOpen, onClose, zoom]);
 
-    // Handle dragging when zoomed
+    // Calculate distance between two touch points
+    const getTouchDistance = (touches: TouchList) => {
+        const touch1 = touches[0];
+        const touch2 = touches[1];
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    // Handle touch start for pinch-to-zoom
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            // Pinch gesture starting
+            const distance = getTouchDistance(e.touches);
+            setInitialPinchDistance(distance);
+            setInitialZoom(zoom);
+        } else if (e.touches.length === 1 && zoom > 1) {
+            // Single touch drag when zoomed
+            setIsDragging(true);
+            setDragStart({
+                x: e.touches[0].clientX - position.x,
+                y: e.touches[0].clientY - position.y,
+            });
+        }
+    };
+
+    // Handle touch move for pinch-to-zoom and drag
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2 && initialPinchDistance !== null) {
+            // Pinch gesture zooming
+            e.preventDefault(); // Prevent page scroll during pinch
+            const currentDistance = getTouchDistance(e.touches);
+            const scale = currentDistance / initialPinchDistance;
+            const newZoom = Math.min(Math.max(initialZoom * scale, MIN_ZOOM), MAX_ZOOM);
+            setZoom(newZoom);
+        } else if (e.touches.length === 1 && isDragging && zoom > 1) {
+            // Single touch dragging when zoomed
+            setPosition({
+                x: e.touches[0].clientX - dragStart.x,
+                y: e.touches[0].clientY - dragStart.y,
+            });
+        }
+    };
+
+    // Handle touch end
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (e.touches.length < 2) {
+            setInitialPinchDistance(null);
+        }
+        if (e.touches.length === 0) {
+            setIsDragging(false);
+        }
+    };
+
+    // Handle dragging when zoomed (mouse)
     const handleMouseDown = (e: React.MouseEvent) => {
         if (zoom > 1) {
             setIsDragging(true);
@@ -114,7 +170,10 @@ const ImageModal = ({ isOpen, imageUrl, onClose, altText = "Full screen image" }
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default', touchAction: 'none' }}
             >
                 <img
                     src={imageUrl}

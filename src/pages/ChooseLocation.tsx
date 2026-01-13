@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Search, LocateFixed, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, LocateFixed, Loader2, Clock, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { addLocationHistory } from "@/services/offlineService";
+import { loadRecentLocations, saveRecentLocation, type LocationItem } from "@/utils/locationStorage";
 
 // Backend URL - REQUIRED for geocoding
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://civiclens-r87i.onrender.com';
@@ -65,6 +66,104 @@ const ChooseLocation = () => {
     lng: 78.9629,
   });
 
+  // New state for search feature
+  const [recentLocations, setRecentLocations] = useState<LocationItem[]>([]);
+  const [suggestions, setSuggestions] = useState<LocationItem[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load recent locations on mount
+  useEffect(() => {
+    const loadRecent = async () => {
+      const recent = await loadRecentLocations();
+      setRecentLocations(recent);
+    };
+    loadRecent();
+  }, []);
+
+  // Handle search query changes with debouncing
+  useEffect(() => {
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    const trimmedQuery = searchQuery.trim();
+
+    // If empty, clear suggestions
+    if (trimmedQuery === '') {
+      setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
+
+    // If less than 3 characters, clear suggestions
+    if (trimmedQuery.length < 3) {
+      setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
+
+    // Show searching state immediately
+    setIsSearching(true);
+
+    // Debounce search for 200ms (faster response)
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/api/search-location?q=${encodeURIComponent(trimmedQuery)}`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Backend search failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Convert to LocationItem format and take top 4
+        const searchResults: LocationItem[] = data.slice(0, 4).map((item: any) => ({
+          address: item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+        }));
+
+        setSuggestions(searchResults);
+      } catch (error) {
+        console.error('Search error:', error);
+        setSuggestions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 200);
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  // Handler for selecting a location from dropdown
+  const handleSelectLocation = async (item: LocationItem) => {
+    setSearchQuery(item.address);
+    setShowDropdown(false);
+    setSuggestions([]);
+
+    // Update map and location
+    await updateLocation(item.lat, item.lng);
+
+    // Save to recent locations
+    await saveRecentLocation(item);
+
+    // Update recent locations list
+    const updated = await loadRecentLocations();
+    setRecentLocations(updated);
+  };
+
+
   const updateLocation = async (lat: number, lng: number) => {
     setIsLoading(true);
     try {
@@ -82,11 +181,14 @@ const ChooseLocation = () => {
 
       // Backend only provides ADDRESS - use clicked/GPS coords for positioning
       // Clicked coords are ALWAYS more accurate than cached approximate coords
-      setLocation({
+      const newLocation = {
         address: data.display_name || "Unknown Location",
         lat: lat,
         lng: lng,
-      });
+      };
+
+      setLocation(newLocation);
+
       // Save as last known location for other parts of the app
       try {
         localStorage.setItem(
@@ -99,6 +201,13 @@ const ChooseLocation = () => {
           longitude: lng,
           address: data.display_name || 'Unknown Location'
         });
+
+        // Save to recent locations
+        await saveRecentLocation(newLocation);
+
+        // Update recent locations list
+        const updated = await loadRecentLocations();
+        setRecentLocations(updated);
       } catch (e) {
         // Ignore storage errors
       }
@@ -144,45 +253,7 @@ const ChooseLocation = () => {
     );
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
 
-    setIsLoading(true);
-    try {
-      // ONLY call backend API - no fallback to Nominatim
-      const response = await fetch(
-        `${BACKEND_URL}/api/search-location?q=${encodeURIComponent(searchQuery)}`,
-        { signal: AbortSignal.timeout(8000) } // 8 second timeout
-      );
-
-      if (!response.ok) {
-        throw new Error(`Backend search failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data && data.length > 0) {
-        const result = data[0];
-        const newLat = parseFloat(result.lat);
-        const newLng = parseFloat(result.lon);
-
-        setLocation({
-          address: result.display_name,
-          lat: newLat,
-          lng: newLng,
-        });
-
-        toast.success("Location found");
-      } else {
-        toast.error("Location not found");
-      }
-    } catch (error) {
-      console.error("Error searching location:", error);
-      toast.error("Failed to search location. Please check backend connection.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleConfirm = async () => {
     // Persist chosen location and return to report form
@@ -218,7 +289,7 @@ const ChooseLocation = () => {
       </div>
 
       {/* Search */}
-      <div className="px-4 py-3 z-10">
+      <div className="px-4 py-3 relative">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
           <input
@@ -226,15 +297,88 @@ const ChooseLocation = () => {
             placeholder="Search address or landmark..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            onFocus={() => setShowDropdown(true)}
+            onBlur={() => {
+              // Delay hiding to allow clicking on dropdown items
+              setTimeout(() => setShowDropdown(false), 200);
+            }}
             className="w-full bg-muted/50 border border-border rounded-xl pl-10 pr-10 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
           />
-          {isLoading && (
+          {(isLoading || isSearching) && (
             <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
               <Loader2 size={18} className="animate-spin text-primary" />
             </div>
           )}
         </div>
+
+        {/* Dropdown for Recent Locations or Search Suggestions */}
+        {showDropdown && (
+          <div className="absolute left-0 right-0 mx-4 top-full -mt-[1px] bg-background border border-t-0 border-border rounded-b-xl shadow-lg max-h-64 overflow-y-auto z-50">
+            {/* Show Recent Locations when search is empty */}
+            {searchQuery.trim() === '' && recentLocations.length > 0 && (
+              <div className="py-1">
+                {recentLocations.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSelectLocation(item)}
+                    className="w-full px-3 py-2.5 flex items-start gap-2.5 hover:bg-muted/50 transition-colors text-left first:rounded-t-xl last:rounded-b-xl"
+                  >
+                    <Clock size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground line-clamp-1">{item.address}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Show "No recent locations" message */}
+            {searchQuery.trim() === '' && recentLocations.length === 0 && (
+              <div className="py-6 px-3 text-center text-sm text-muted-foreground">
+                No recent locations
+              </div>
+            )}
+
+            {/* Show Searching indicator */}
+            {searchQuery.trim().length >= 3 && isSearching && (
+              <div className="py-6 px-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Searching...</span>
+              </div>
+            )}
+
+            {/* Show Search Suggestions when query length >= 3 */}
+            {searchQuery.trim().length >= 3 && !isSearching && suggestions.length > 0 && (
+              <div className="py-1">
+                {suggestions.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSelectLocation(item)}
+                    className="w-full px-3 py-2.5 flex items-start gap-2.5 hover:bg-muted/50 transition-colors text-left first:rounded-t-xl last:rounded-b-xl"
+                  >
+                    <MapPin size={16} className="text-primary mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground line-clamp-2">{item.address}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Show "No results" when searching but no suggestions */}
+            {searchQuery.trim().length >= 3 && !isSearching && suggestions.length === 0 && (
+              <div className="py-6 px-3 text-center text-sm text-muted-foreground">
+                No results found
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Map Area */}

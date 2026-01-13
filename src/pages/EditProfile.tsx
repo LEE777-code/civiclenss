@@ -65,7 +65,7 @@ const EditProfile = () => {
         try {
           const { data, error } = await supabase
             .from('users')
-            .select('*')
+            .select('clerk_id, phone, dob, age, gender, district')
             .eq('clerk_id', user.id)
             .single();
 

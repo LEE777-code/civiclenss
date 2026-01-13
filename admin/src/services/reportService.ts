@@ -131,6 +131,30 @@ export const reportService = {
             return { success: false, error: error };
         }
 
+        // Automatically notify user when admin resolves/rejects their report
+        try {
+            // Get report owner's user_id and title
+            const { data: report } = await supabase
+                .from('reports')
+                .select('user_id, title')
+                .eq('id', id)
+                .single();
+
+            if (report?.user_id) {
+                await supabase.from('notifications').insert({
+                    recipient_type: 'user',
+                    recipient_clerk_id: report.user_id,
+                    report_id: id,
+                    type: 'issue_resolved',
+                    title: status === 'resolved' ? 'Issue Resolved' : 'Issue Rejected',
+                    body: status === 'resolved' ? 'Your report has been resolved' : 'Your report was rejected',
+                    status: 'pending'
+                });
+            }
+        } catch (notifError) {
+            console.log('Admin resolved notification failed (non-critical)', notifError);
+        }
+
         return { success: true };
     },
 
@@ -158,6 +182,30 @@ export const reportService = {
         if (error) {
             console.error('Error marking report as viewed:', error);
             return false;
+        }
+
+       // Automatically notify user when admin views their report
+        try {
+            // Get report owner's user_id and title
+            const { data: report } = await supabase
+                .from('reports')
+                .select('user_id, title')
+                .eq('id', id)
+                .single();
+
+            if (report?.user_id) {
+                await supabase.from('notifications').insert({
+                    recipient_type: 'user',
+                    recipient_clerk_id: report.user_id,
+                    report_id: id,
+                    type: 'issue_viewed',
+                    title: 'Admin Reviewing Your Report',
+                    body: 'An admin is reviewing your report',
+                    status: 'pending'
+                });
+            }
+        } catch (notifError) {
+            console.log('Admin viewed notification failed (non-critical)', notifError);
         }
 
         return true;

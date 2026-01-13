@@ -22,17 +22,16 @@ const NearbyAlerts = () => {
 
   useEffect(() => {
     const fetchAlerts = async () => {
-      console.log('🔍 NearbyAlerts: fetchAlerts called, isOnline:', isOnline);
+      // Fetch alerts from Supabase or cache
       try {
         if (isOnline) {
-          console.log('🌐 NearbyAlerts: Fetching from Supabase...');
           const { data, error } = await supabase
             .from('reports')
-            .select('*')
+            .select('id, title, description, location_name, category, severity, status, upvotes, created_at')
             .order('created_at', { ascending: false })
-            .limit(20); // Fetch last 20 reports as alerts
+            .limit(40); // Limit to 40 nearby reports
 
-          console.log('📊 NearbyAlerts: Received data:', data?.length, 'reports');
+
           if (data) {
             setAllAlerts(data.map(report => ({
               id: report.id,

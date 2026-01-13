@@ -45,11 +45,9 @@ const IssuePreview = () => {
     if (formData.image) {
       if (typeof formData.image === 'string') {
         // It's already a URL or base64 string
-        console.log('Image is a string:', formData.image.substring(0, 50));
         setImagePreviewUrl(formData.image);
       } else if (formData.image instanceof File || formData.image instanceof Blob) {
         // It's a File/Blob object, convert to preview URL
-        console.log('Image is a File/Blob, creating object URL');
         const url = URL.createObjectURL(formData.image);
         setImagePreviewUrl(url);
 
@@ -58,11 +56,9 @@ const IssuePreview = () => {
           URL.revokeObjectURL(url);
         };
       } else {
-        console.log('Unknown image type:', typeof formData.image);
         setImagePreviewUrl(sampleImage);
       }
     } else {
-      console.log('No image provided, using sample');
       setImagePreviewUrl(sampleImage);
     }
   }, [formData.image]);
@@ -109,12 +105,12 @@ const IssuePreview = () => {
         upvotes: 0,
       };
 
-      console.log('Submitting report:', reportData);
+
 
       const { data, error } = await supabase
-        .from('reports')
+        .from("reports")
         .insert([reportData])
-        .select()
+        .select('id') // Only return id for notification
         .single();
 
       if (error) {
@@ -123,7 +119,26 @@ const IssuePreview = () => {
         return;
       }
 
-      console.log('Report submitted successfully:', data);
+
+
+      // Automatically trigger nearby notifications (event-driven)
+      try {
+        if (formData.latitude && formData.longitude && data[0]?.id) {
+          // Insert notification event - trigger will handle sending
+          await supabase.from('notifications').insert({
+            recipient_type: 'broadcast',
+            actor_clerk_id: userId,
+            report_id: data[0].id,
+            type: 'issue_submitted',
+            title: `New ${formData.category} Issue`,
+            body: formData.title || 'A new issue was reported',
+            status: 'pending'
+          });
+        }
+      } catch (notifError) {
+        console.log('Notification creation failed:', notifError);
+      }
+
       toast.success("Issue reported successfully!");
       navigate("/home");
     } catch (error) {

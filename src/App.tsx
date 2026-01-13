@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { isAuthenticated } from "@/services/authService";
 import OfflineIndicator from "@/components/OfflineIndicator";
+import AppBackHandler from "@/components/AppBackHandler";
+import PushSetup from "@/components/PushSetup";
 import Splash from "./pages/Splash";
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
@@ -39,6 +41,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <PushSetup />
+        <AppBackHandler />
         <OfflineIndicator />
         <Routes>
           <Route path="/" element={<Splash />} />

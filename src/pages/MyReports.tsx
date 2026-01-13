@@ -24,7 +24,7 @@ const MyReports = () => {
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
 
   const fetchMyReports = async () => {
-    console.log('🔍 MyReports: fetchMyReports called, isOnline:', isOnline);
+    // Fetch user's reports from Supabase or cache
     // Get user ID from Clerk or localStorage (anonymous)
     let userId = user?.id;
     if (!userId) {
@@ -59,19 +59,20 @@ const MyReports = () => {
 
     try {
       if (isOnline) {
-        console.log('🌐 MyReports: Fetching from Supabase for user:', userId);
+        // Fetch from Supabase
         const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
+          .from("reports")
+          .select('id, title, status, severity, category, location_name, created_at, image_url, resolved_image_url, description, upvotes')
+          .eq("user_id", user.id)
+          .order('created_at', { ascending: false })
+          .limit(50); // Limit to 50 most recent user reports
 
         if (error) {
           console.error('Error fetching reports:', error);
           return;
         }
 
-        console.log('📊 MyReports: Received data:', data?.length, 'reports');
+
         if (data) {
           setReports(data.map(report => ({
             id: report.id,

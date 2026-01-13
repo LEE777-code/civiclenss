@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMap, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import BottomNav from "@/components/BottomNav";
@@ -170,10 +170,12 @@ const MapView = () => {
         if (isOnline) {
           const { data, error } = await supabase
             .from('reports')
-            .select('*')
+            .select('id, title, category, severity, latitude, longitude, created_at, status, location_name')
+            .not("latitude", "is", null)
+            .not("longitude", "is", null)
             .eq('status', 'pending') // Only show pending reports so markers match Nearby issues
             .order('created_at', { ascending: false })
-            .limit(50); // Fetch more than Home (5) to populate the map well
+            .limit(100); // Limit to 100 markers for performance
 
           if (data) {
             const prepared: any[] = [];
@@ -196,7 +198,7 @@ const MapView = () => {
             // For reports without coords, attempt geocoding for a limited number to avoid rate limits
             const toGeocode = data.filter(r => !(r.latitude && r.longitude)).slice(0, 10);
             for (const report of toGeocode) {
-              const locName = report.location_name || report.location || '';
+              const locName = report.location_name || '';
               const geo = await geocodeLocation(locName);
               if (geo) {
                 prepared.push({
@@ -249,10 +251,7 @@ const MapView = () => {
     fetchReports();
   }, [isOnline]);
 
-  // Debug logs
-  useEffect(() => {
-    console.log("Current Markers State:", markers);
-  }, [markers]);
+
 
   return (
     <SwipeWrapper swipeDisabled={true} className="mobile-container h-screen flex flex-col bg-background pb-20">

@@ -498,6 +498,185 @@ app.post('/api/send-report-assignment', async (req, res) => {
   }
 });
 
+// ============================================
+// Push Notifications Endpoints
+// ============================================
+
+/**
+ * Register FCM token for a user (silent, automatic)
+ * Stores token in database for push notification targeting
+ */
+app.post('/api/notifications/register', async (req, res) => {
+  try {
+    const { userId, fcmToken, platform, appVersion, timestamp } = req.body;
+
+    if (!userId || !fcmToken) {
+      return res.status(400).json({
+        error: 'Missing required fields: userId, fcmToken'
+      });
+    }
+
+    console.log(`📱 Registering FCM token for user: ${userId} (${platform})`);
+
+    // Check if token already exists for this user
+    const { data: existingToken, error: checkError } = await supabase
+      .from('fcm_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('fcm_token', fcmToken)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned (not an error for us)
+      console.error('Error checking existing token:', checkError);
+    }
+
+    if (existingToken) {
+      // Update existing token
+      const { error: updateError } = await supabase
+        .from('fcm_tokens')
+        .update({
+          platform,
+          app_version: appVersion,
+          last_updated: new Date().toISOString(),
+          is_active: true
+        })
+        .eq('user_id', userId)
+        .eq('fcm_token', fcmToken);
+
+      if (updateError) {
+        console.error('Error updating FCM token:', updateError);
+        return res.status(500).json({
+          error: 'Failed to update FCM token',
+          details: updateError.message
+        });
+      }
+
+      console.log('✅ FCM token updated successfully');
+      return res.json({
+        success: true,
+        message: 'FCM token updated successfully',
+        action: 'updated'
+      });
+    }
+
+    // Insert new token
+    const { error: insertError } = await supabase
+      .from('fcm_tokens')
+      .insert({
+        user_id: userId,
+        fcm_token: fcmToken,
+        platform: platform || 'unknown',
+        app_version: appVersion || '1.0.0',
+        is_active: true
+      });
+
+    if (insertError) {
+      console.error('Error inserting FCM token:', insertError);
+      return res.status(500).json({
+        error: 'Failed to register FCM token',
+        details: insertError.message
+      });
+    }
+
+    console.log('✅ FCM token registered successfully');
+    res.json({
+      success: true,
+      message: 'FCM token registered successfully',
+      action: 'created'
+    });
+
+  } catch (error) {
+    console.error('FCM registration error:', error);
+    res.status(500).json({
+      error: 'Internal server error during FCM registration',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Unregister FCM token (on logout)
+ */
+app.post('/api/notifications/unregister', async (req, res) => {
+  try {
+    const { userId, fcmToken } = req.body;
+
+    if (!userId || !fcmToken) {
+      return res.status(400).json({
+        error: 'Missing required fields: userId, fcmToken'
+      });
+    }
+
+    console.log(`🔕 Unregistering FCM token for user: ${userId}`);
+
+    // Mark token as inactive instead of deleting
+    const { error } = await supabase
+      .from('fcm_tokens')
+      .update({ is_active: false })
+      .eq('user_id', userId)
+      .eq('fcm_token', fcmToken);
+
+    if (error) {
+      console.error('Error unregistering FCM token:', error);
+      return res.status(500).json({
+        error: 'Failed to unregister FCM token',
+        details: error.message
+      });
+    }
+
+    console.log('✅ FCM token unregistered successfully');
+    res.json({
+      success: true,
+      message: 'FCM token unregistered successfully'
+    });
+
+  } catch (error) {
+    console.error('FCM unregistration error:', error);
+    res.status(500).json({
+      error: 'Internal server error during FCM unregistration',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Get all active tokens for a user (for debugging/admin)
+ */
+app.get('/api/notifications/tokens/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const { data, error } = await supabase
+      .from('fcm_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching FCM tokens:', error);
+      return res.status(500).json({
+        error: 'Failed to fetch FCM tokens',
+        details: error.message
+      });
+    }
+
+    res.json({
+      userId,
+      tokens: data || [],
+      count: data?.length || 0
+    });
+
+  } catch (error) {
+    console.error('Error fetching tokens:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      details: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {

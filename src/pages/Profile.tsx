@@ -9,6 +9,7 @@ import { clearOfflineCache, cacheUserProfile, getCachedUserProfile, getCachedRep
 import { useEffect, useState } from "react";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ const Profile = () => {
   const { signOut } = useClerk();
   const isOnline = useOnlineStatus();
   const [reportCounts, setReportCounts] = useState({ pending: 0, resolved: 0 });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Cache user profile when user data is available
   useEffect(() => {
@@ -49,13 +51,13 @@ const Profile = () => {
         try {
           const { count: pendingCount } = await supabase
             .from('reports')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
             .eq('status', 'pending');
 
           const { count: resolvedCount } = await supabase
             .from('reports')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
             .eq('status', 'resolved');
 
@@ -71,6 +73,51 @@ const Profile = () => {
 
     fetchReportCounts();
   }, [user, isOnline]);
+
+  // Load notification preference
+  useEffect(() => {
+    const loadNotificationPreference = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from('user_devices')
+            .select('notifications_enabled')
+            .eq('clerk_id', user.id)
+            .single();
+
+          if (data && !error) {
+            setNotificationsEnabled(data.notifications_enabled ?? true);
+          }
+        } catch (error) {
+          console.error('Error loading notification preference:', error);
+        }
+      }
+    };
+    loadNotificationPreference();
+  }, [user]);
+
+  // Toggle notification preference
+  const handleNotificationToggle = async () => {
+    if (!user) return;
+
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabled(newValue);
+
+    try {
+      const { error } = await supabase
+        .from('user_devices')
+        .update({ notifications_enabled: newValue })
+        .eq('clerk_id', user.id);
+
+      if (error) throw error;
+
+      toast.success(newValue ? 'Notifications enabled' : 'Notifications disabled');
+    } catch (error) {
+      console.error('Error updating notification preference:', error);
+      setNotificationsEnabled(!newValue); // Revert on error
+      toast.error('Failed to update notification preference');
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -177,6 +224,18 @@ const Profile = () => {
                 {item.type === "toggle" ? (
                   item.label === "Dark Mode" ? (
                     <ThemeToggle />
+                  ) : item.label === "Notifications" ? (
+                    <button
+                      onClick={handleNotificationToggle}
+                      className={`w-11 h-6 rounded-full p-0.5 transition-colors ${notificationsEnabled ? "bg-primary" : "bg-muted"
+                        }`}
+                      aria-label="Toggle notifications"
+                    >
+                      <div
+                        className={`w-5 h-5 bg-primary-foreground rounded-full shadow transition-transform ${notificationsEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                      />
+                    </button>
                   ) : (
                     <div className="w-11 h-6 bg-muted rounded-full p-0.5">
                       <div className="w-5 h-5 bg-primary-foreground rounded-full shadow" />

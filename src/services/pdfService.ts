@@ -434,8 +434,46 @@ export async function generateReportPDF(report: ReportData) {
     return await pdfDoc.save();
 }
 
-export function downloadPDF(pdfBytes: Uint8Array, filename: string) {
+// Helper: Convert Blob to Base64
+function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+export async function downloadPDF(pdfBytes: Uint8Array, filename: string) {
     const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+    
+    // Check if Capacitor is available (only on mobile)
+    const isNative = typeof window !== 'undefined' && 
+                     (window as any).Capacitor?.isNativePlatform?.();
+    
+    // ANDROID/iOS: Save to Documents folder
+    if (isNative) {
+        try {
+            const base64 = await blobToBase64(blob);
+            
+            // ✅ Dynamic import ONLY here (no static imports anywhere)
+            const fs = await import('@capacitor/filesystem');
+            
+            await fs.Filesystem.writeFile({
+                path: filename,
+                data: base64,
+                directory: fs.Directory.Documents,
+            });
+            
+            console.log('✅ PDF saved to Documents:', filename);
+            return;
+        } catch (error) {
+            console.error('Mobile PDF save failed:', error);
+            // Fall through to web download
+        }
+    }
+    
+    // WEB: Browser download fallback
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
