@@ -33,3 +33,10 @@ dist-ssr
 =======
 # Environment Variables
 
+# Firebase Configuration
+android/app/google-services.json
+google-services.json
+
+# Backend Environment
+backend/.env
+backend/.env.local
