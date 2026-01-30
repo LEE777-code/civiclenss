@@ -1,15 +1,17 @@
 import { Home, FileText, Map, User } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const BottomNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
 
   const navItems = [
-    { icon: Home, label: "Home", path: "/home" },
-    { icon: FileText, label: "Report", path: "/report" },
-    { icon: Map, label: "Map", path: "/map" },
-    { icon: User, label: "Profile", path: "/profile" },
+    { icon: Home, label: t("nav.home"), path: "/home" },
+    { icon: FileText, label: t("nav.report"), path: "/report" },
+    { icon: Map, label: t("nav.map"), path: "/map" },
+    { icon: User, label: t("nav.profile"), path: "/profile" },
   ];
 
   return (

@@ -166,63 +166,83 @@ const ChooseLocation = () => {
 
   const updateLocation = async (lat: number, lng: number) => {
     setIsLoading(true);
-    try {
-      // ONLY call backend API - no fallback to Nominatim
-      const response = await fetch(
-        `${BACKEND_URL}/api/reverse-geocode?lat=${lat}&lon=${lng}`,
-        { signal: AbortSignal.timeout(8000) } // 8 second timeout
-      );
+    let displayAddress = "Selected Location";
 
-      if (!response.ok) {
-        throw new Error(`Backend geocoding failed: ${response.status}`);
+    try {
+      // 1. Try Backend API first (with longer timeout)
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/api/reverse-geocode?lat=${lat}&lon=${lng}`,
+          { signal: AbortSignal.timeout(15000) } // Increased to 15s
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.display_name) {
+            displayAddress = data.display_name;
+          }
+        } else {
+          throw new Error("Backend failed");
+        }
+      } catch (backendError) {
+        console.warn("Backend geocoding failed, trying fallback...", backendError);
+
+        // 2. Fallback: Direct Nominatim Call (Client-side)
+        // Note: usage limits apply, but this prevents blocking the user
+        const fallbackResponse = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          {
+            headers: { 'Accept-Language': 'en-US,en;q=0.9' }
+          }
+        );
+
+        if (fallbackResponse.ok) {
+          const data = await fallbackResponse.json();
+          if (data.display_name) {
+            displayAddress = data.display_name;
+          }
+        }
       }
 
-      const data = await response.json();
-
-      // Backend only provides ADDRESS - use clicked/GPS coords for positioning
-      // Clicked coords are ALWAYS more accurate than cached approximate coords
+      // 3. Update State
       const newLocation = {
-        address: data.display_name || "Unknown Location",
+        address: displayAddress,
         lat: lat,
         lng: lng,
       };
 
       setLocation(newLocation);
 
-      // Save as last known location for other parts of the app
+      // Save as last known location
       try {
         localStorage.setItem(
           'lastLocation',
-          JSON.stringify({ address: data.display_name || 'Unknown Location', lat, lng })
+          JSON.stringify(newLocation)
         );
-        // Cache location in history
         await addLocationHistory({
           latitude: lat,
           longitude: lng,
-          address: data.display_name || 'Unknown Location'
+          address: displayAddress
         });
-
-        // Save to recent locations
         await saveRecentLocation(newLocation);
-
-        // Update recent locations list
         const updated = await loadRecentLocations();
         setRecentLocations(updated);
       } catch (e) {
         // Ignore storage errors
       }
-      toast.success("Location updated");
+
+      if (displayAddress !== "Selected Location") {
+        toast.success("Location updated");
+      } else {
+        toast.info("Location set (Address parsing unavailable)");
+      }
+
     } catch (error) {
       console.error("Error fetching address:", error);
-      // Still update coordinates
-      setLocation(prev => ({ ...prev, lat, lng, address: "Selected Location" }));
-      try {
-        localStorage.setItem(
-          'lastLocation',
-          JSON.stringify({ address: 'Selected Location', lat, lng })
-        );
-      } catch (e) { }
-      toast.error("Failed to fetch address. Please check backend connection.");
+      // Fallback to coordinates if everything fails
+      const coordAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setLocation(prev => ({ ...prev, lat, lng, address: coordAddress }));
+      toast.error("Could not fetch address details. Coordinates saved.");
     } finally {
       setIsLoading(false);
     }

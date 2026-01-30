@@ -216,6 +216,8 @@ const Profile = () => {
                 key={item.label}
                 className={`flex items-center justify-between py-3 ${index < menuItems.length - 1 ? "border-b border-border" : ""
                   }`}
+                onClick={item.type === "link" ? () => navigate("/support") : undefined}
+                role={item.type === "link" ? "button" : undefined}
               >
                 <div className="flex items-center gap-3">
                   <item.icon size={20} className="text-muted-foreground" />
@@ -226,7 +228,10 @@ const Profile = () => {
                     <ThemeToggle />
                   ) : item.label === "Notifications" ? (
                     <button
-                      onClick={handleNotificationToggle}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNotificationToggle();
+                      }}
                       className={`w-11 h-6 rounded-full p-0.5 transition-colors ${notificationsEnabled ? "bg-primary" : "bg-muted"
                         }`}
                       aria-label="Toggle notifications"

@@ -25,6 +25,7 @@ interface Report {
   description: string;
   status: string;
   date: string;
+  expectedResolution: string | null;
   location: string;
   image: string | null;
   upvotes: number;
@@ -51,7 +52,7 @@ const ReportDetails = () => {
       if (isOnline) {
         const { data, error } = await supabase
           .from('reports')
-          .select('id, title, category, severity, description, status, created_at, location_name, image_url, upvotes, viewed_by_admin, admin_viewed_at, resolved_by, resolved_at')
+          .select('id, title, category, severity, description, status, created_at, deadline, location_name, image_url, upvotes, viewed_by_admin, admin_viewed_at, resolved_by, resolved_at')
           .eq('id', id)
           .single();
 
@@ -64,6 +65,7 @@ const ReportDetails = () => {
             description: data.description,
             status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
             date: new Date(data.created_at).toLocaleString(),
+            expectedResolution: data.deadline ? new Date(data.deadline).toLocaleString() : null,
             location: data.location_name || "Unknown Location",
             image: data.image_url || null, // Add the image URL
             upvotes: data.upvotes || 0,
@@ -104,6 +106,7 @@ const ReportDetails = () => {
             description: cachedData.description,
             status: cachedData.status.charAt(0).toUpperCase() + cachedData.status.slice(1),
             date: new Date(cachedData.created_at).toLocaleString(),
+            expectedResolution: cachedData.deadline ? new Date(cachedData.deadline).toLocaleString() : null,
             location: cachedData.location_name || "Unknown Location",
             image: cachedData.image_url || null,
             upvotes: cachedData.upvotes || 0,
@@ -325,12 +328,26 @@ const ReportDetails = () => {
             <p className="text-muted-foreground text-sm">{report.date}</p>
           </div>
 
+          {report.expectedResolution && (
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                <CheckCircle size={16} className="text-primary" />
+                Expected Resolution
+              </h3>
+              <p className="text-muted-foreground text-sm">{report.expectedResolution}</p>
+            </div>
+          )}
+
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <MapPin size={16} className="text-primary" />
               Location
             </h3>
             <p className="text-muted-foreground text-sm">{report.location}</p>
+          </div>
+
+          <div className="pt-2 border-t border-border mt-2">
+            <p className="text-xs text-muted-foreground">Complaint ID: <span className="font-mono text-foreground">{report.id}</span></p>
           </div>
         </div>
 
@@ -378,7 +395,10 @@ const ReportDetails = () => {
         </div>
 
         {/* Contact Support */}
-        <button className="btn-primary flex items-center justify-center gap-2">
+        <button
+          onClick={() => navigate("/support")}
+          className="btn-primary flex items-center justify-center gap-2"
+        >
           <MessageSquare size={20} />
           Contact Support
         </button>

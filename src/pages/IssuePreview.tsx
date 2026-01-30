@@ -69,6 +69,19 @@ const IssuePreview = () => {
       return;
     }
 
+    // SPAM CONTROL: Check for recent submissions (rate limit: 5 minutes)
+    const lastSubmission = localStorage.getItem('last_report_timestamp');
+    if (lastSubmission) {
+      const timeSinceLast = Date.now() - parseInt(lastSubmission);
+      const cooldown = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+      if (timeSinceLast < cooldown) {
+        const minutesLeft = Math.ceil((cooldown - timeSinceLast) / 60000);
+        toast.error(`Please wait ${minutesLeft} minute(s) before submitting another report.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
@@ -119,7 +132,8 @@ const IssuePreview = () => {
         return;
       }
 
-
+      // SPAM CONTROL: Update timestamp on successful submission
+      localStorage.setItem('last_report_timestamp', Date.now().toString());
 
       // Automatically trigger nearby notifications (event-driven)
       try {

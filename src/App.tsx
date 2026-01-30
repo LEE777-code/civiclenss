@@ -7,6 +7,7 @@ import { isAuthenticated } from "@/services/authService";
 import OfflineIndicator from "@/components/OfflineIndicator";
 import AppBackHandler from "@/components/AppBackHandler";
 import PushSetup from "@/components/PushSetup";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import Splash from "./pages/Splash";
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
@@ -21,6 +22,7 @@ import ReportDetails from "./pages/ReportDetails";
 import MapView from "./pages/MapView";
 import Profile from "./pages/Profile";
 import EditProfile from "./pages/EditProfile";
+import ContactSupport from "./pages/ContactSupport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,30 +40,33 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <PushSetup />
-        <AppBackHandler />
-        <OfflineIndicator />
-        <Routes>
-          <Route path="/" element={<Splash />} />
-          <Route path="/onboarding" element={<AuthRoute><Onboarding /></AuthRoute>} />
-          <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
-          <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
-          <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-          <Route path="/report" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
-          <Route path="/choose-location" element={<ProtectedRoute><ChooseLocation /></ProtectedRoute>} />
-          <Route path="/issue-preview" element={<ProtectedRoute><IssuePreview /></ProtectedRoute>} />
-          <Route path="/alerts" element={<ProtectedRoute><NearbyAlerts /></ProtectedRoute>} />
-          <Route path="/my-reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
-          <Route path="/report-details/:id" element={<ProtectedRoute><ReportDetails /></ProtectedRoute>} />
-          <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <LanguageProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PushSetup />
+          <AppBackHandler />
+          <OfflineIndicator />
+          <Routes>
+            <Route path="/" element={<Splash />} />
+            <Route path="/onboarding" element={<AuthRoute><Onboarding /></AuthRoute>} />
+            <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+            <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
+            <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/report" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
+            <Route path="/choose-location" element={<ProtectedRoute><ChooseLocation /></ProtectedRoute>} />
+            <Route path="/issue-preview" element={<ProtectedRoute><IssuePreview /></ProtectedRoute>} />
+            <Route path="/alerts" element={<ProtectedRoute><NearbyAlerts /></ProtectedRoute>} />
+            <Route path="/my-reports" element={<ProtectedRoute><MyReports /></ProtectedRoute>} />
+            <Route path="/report-details/:id" element={<ProtectedRoute><ReportDetails /></ProtectedRoute>} />
+            <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+            <Route path="/support" element={<ProtectedRoute><ContactSupport /></ProtectedRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </LanguageProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

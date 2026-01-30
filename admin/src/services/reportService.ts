@@ -3,23 +3,39 @@ import { supabase } from '@/lib/supabase';
 export interface Report {
     id: string;
     title: string;
-    description: string;
+    description?: string;
     category: string;
     status: 'pending' | 'resolved' | 'rejected';
     severity: 'low' | 'medium' | 'high';
-    location_name: string;
+    location_name?: string;
     latitude?: number;
     longitude?: number;
     image_url?: string;
-    user_id: string;
-    upvotes: number;
+    user_id?: string;
+    upvotes?: number;
     created_at: string;
-    updated_at: string;
+    updated_at?: string;
     resolved_at?: string;
     resolved_image_url?: string;
     viewed_by_admin?: boolean;
     admin_viewed_at?: string;
     resolved_by?: string;
+    // Governance fields
+    deadline?: string;
+    escalated?: boolean;
+    escalated_at?: string;
+    district?: string;
+    state?: string;
+}
+
+export interface AuditLog {
+    id: string;
+    report_id: string;
+    admin_id: string;
+    admin_name?: string;
+    action: string;
+    details: string | object;
+    created_at: string;
 }
 
 export interface ReportFilters {
@@ -50,8 +66,9 @@ export const reportService = {
     async getReports(filters?: ReportFilters): Promise<Report[]> {
         let query = supabase
             .from('reports')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('id, title, category, status, severity, location_name, user_id, upvotes, created_at, updated_at, deadline, escalated, escalated_at, district, state')
+            .order('created_at', { ascending: false })
+            .range(0, 49); // Limit to 50 most recent for performance
 
         if (filters?.status && filters.status !== 'all') {
             query = query.eq('status', filters.status);
@@ -311,7 +328,7 @@ export const reportService = {
     async getRecentReports(limit: number = 10): Promise<Report[]> {
         const { data, error } = await supabase
             .from('reports')
-            .select('*')
+            .select('id, title, category, status, severity, created_at, deadline')
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -336,5 +353,21 @@ export const reportService = {
         }
 
         return true;
+    },
+
+    // Get Audit Logs for a report
+    async getAuditLogs(reportId: string): Promise<AuditLog[]> {
+        const { data, error } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .eq('report_id', reportId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching audit logs:', error);
+            return [];
+        }
+
+        return data || [];
     },
 };
