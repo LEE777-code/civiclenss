@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
+  envDir: "..",
   plugins: [react()].filter(Boolean),
   resolve: {
     alias: {
