@@ -26,17 +26,13 @@ dist-ssr
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-=======
-# Environment Variables
+.env.*
+!.env.example
+
+# Backend Environment
+backend/.env
+backend/.env.*
 
 # Firebase Configuration
 android/app/google-services.json
 google-services.json
-
-# Backend Environment
-backend/.env
-backend/.env.local
