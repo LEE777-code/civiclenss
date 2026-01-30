@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { getOfficers, assignOfficerToReport, Officer } from "@/services/officerService";
 import { assignReportViaWhatsApp } from "@/services/whatsappService";
 import { assignReportViaEmail } from "@/services/emailService";
@@ -50,30 +51,18 @@ export default function ReportDetailsPage() {
     useEffect(() => {
         fetchReport();
         loadOfficers(); // Load officers list
-
-        if (!id) return;
-
-        // Set up real-time subscription
-        const channel = supabase
-            .channel(`admin-report-${id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'reports',
-                    filter: `id=eq.${id}`
-                },
-                () => {
-                    fetchReport();
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, [id]);
+
+    useRealtimeSubscription({
+        channelName: `admin-report-${id}`,
+        table: 'reports',
+        event: 'UPDATE',
+        filter: id ? `id=eq.${id}` : undefined,
+        enabled: !!id,
+        onChange: () => {
+            fetchReport();
+        },
+    });
 
     const handleProofImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];

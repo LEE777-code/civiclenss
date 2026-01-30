@@ -3,6 +3,7 @@ import { IssuesTable } from "@/components/dashboard/IssuesTable";
 import { Report, reportService } from "@/services/reportService";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export default function Issues() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -21,30 +22,15 @@ export default function Issues() {
 
   useEffect(() => {
     fetchReports();
-
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('issues-reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'reports'
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          // Refetch data when any change occurs
-          fetchReports();
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  useRealtimeSubscription({
+    channelName: 'issues-reports',
+    table: 'reports',
+    onChange: () => {
+      fetchReports();
+    },
+  });
 
   if (loading) {
     return (

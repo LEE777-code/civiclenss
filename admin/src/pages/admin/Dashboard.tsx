@@ -6,6 +6,7 @@ import { IssueSummaryPanel } from "@/components/dashboard/IssueSummaryPanel";
 import { Report, reportService, ReportStats } from "@/services/reportService";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export default function Dashboard() {
   const { admin } = useAuth();
@@ -30,30 +31,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('dashboard-reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'reports'
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          // Refetch data when any change occurs
-          fetchData();
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  useRealtimeSubscription({
+    channelName: 'dashboard-reports',
+    table: 'reports',
+    onChange: () => {
+      fetchData();
+    },
+  });
 
   if (loading) {
     return (
