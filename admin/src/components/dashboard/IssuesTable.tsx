@@ -27,6 +27,12 @@ import { useAuth } from "@/contexts/AuthContext";
 interface IssuesTableProps {
   issues: Issue[] | Report[];
   compact?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
+  statusFilter?: string;
+  onStatusChange?: (value: string) => void;
+  categoryFilter?: string;
+  onCategoryChange?: (value: string) => void;
 }
 
 const statusStyles = {
@@ -64,27 +70,36 @@ const isReport = (issue: Issue | Report): issue is Report => {
   return 'severity' in issue;
 };
 
-export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
+export function IssuesTable({
+  issues,
+  compact = false,
+  searchQuery = "",
+  onSearchChange,
+  statusFilter = "all",
+  onStatusChange,
+  categoryFilter = "all",
+  onCategoryChange
+}: IssuesTableProps) {
   const { adminEmail } = useAuth();
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  // Internal state removed - now controlled by parent
 
   const handleStatusUpdate = async (issue: Issue | Report, newStatus: string) => {
     try {
-      let success = false;
+      let result: boolean | { success: boolean; error?: any } = false;
       if (isReport(issue)) {
         // It's a Report type - pass admin email when resolving
-        success = await reportService.updateReportStatus(
+        result = await reportService.updateReportStatus(
           issue.id,
           newStatus as Report['status'],
           adminEmail
         );
       } else {
         // It's an Issue type
-        success = await issueService.updateIssueStatus(issue.id, newStatus as Issue['status']);
+        result = await issueService.updateIssueStatus(issue.id, newStatus as Issue['status']);
       }
+
+      const success = typeof result === 'object' ? result.success : result;
 
       if (success) {
         toast.success("Status updated successfully");
@@ -105,17 +120,10 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
     navigate(`/admin/issues/${issue.id}`);
   };
 
-  const filteredIssues = issues.filter((issue) => {
-    const matchesSearch =
-      issue.title.toLowerCase().includes(search.toLowerCase()) ||
-      issue.id.toLowerCase().includes(search.toLowerCase()) ||
-      getLocation(issue).toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || issue.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || issue.category === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
+  // Removed client-side filtering. Issues are now passed already filtered from the server.
+  const filteredIssues = issues;
 
-  const categories = [...new Set(issues.map((i) => i.category))];
+  const categories = ["Infrastructure", "Sanitation", "Environment", "Public Safety", "Transportation", "Other"];
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -124,19 +132,20 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
         <h3 className="text-lg font-semibold text-foreground">
           {compact ? "Recent Issues" : "All Issues"}
         </h3>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search issues..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 w-full sm:w-64"
-            />
-          </div>
-          {!compact && (
+        {!compact && (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search issues..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+                className="pl-9 w-full sm:w-64"
+              />
+            </div>
+
             <>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={onStatusChange}>
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -148,7 +157,7 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select value={categoryFilter} onValueChange={onCategoryChange}>
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
@@ -162,8 +171,8 @@ export function IssuesTable({ issues, compact = false }: IssuesTableProps) {
                 </SelectContent>
               </Select>
             </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}

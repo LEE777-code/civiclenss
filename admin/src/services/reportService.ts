@@ -29,6 +29,7 @@ export interface ReportFilters {
     searchQuery?: string;
     dateFrom?: string;
     dateTo?: string;
+    limit?: number;
 }
 
 export interface ReportStats {
@@ -65,7 +66,7 @@ export const reportService = {
         }
 
         if (filters?.searchQuery) {
-            query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`);
+            query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%,location_name.ilike.%${filters.searchQuery}%`);
         }
 
         if (filters?.dateFrom) {
@@ -75,6 +76,9 @@ export const reportService = {
         if (filters?.dateTo) {
             query = query.lte('created_at', filters.dateTo);
         }
+
+        // Default limit if not provided, to prevent performance issues
+        query = query.limit(filters?.limit || 50);
 
         const { data, error } = await query;
 
@@ -184,7 +188,7 @@ export const reportService = {
             return false;
         }
 
-       // Automatically notify user when admin views their report
+        // Automatically notify user when admin views their report
         try {
             // Get report owner's user_id and title
             const { data: report } = await supabase

@@ -8,10 +8,28 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 export default function Issues() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchReports = async () => {
+    setLoading(true);
     try {
-      const data = await reportService.getReports();
+      const data = await reportService.getReports({
+        status,
+        category,
+        searchQuery: debouncedSearch,
+        limit: 50 // Limit initial fetch to 50 items for speed
+      });
       setReports(data);
     } catch (error) {
       console.error("Error fetching reports:", error);
@@ -22,7 +40,7 @@ export default function Issues() {
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [status, category, debouncedSearch]);
 
   useRealtimeSubscription({
     channelName: 'issues-reports',
@@ -32,7 +50,7 @@ export default function Issues() {
     },
   });
 
-  if (loading) {
+  if (loading && reports.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -49,7 +67,15 @@ export default function Issues() {
         </p>
       </div>
 
-      <IssuesTable issues={reports} />
+      <IssuesTable
+        issues={reports}
+        searchQuery={search}
+        onSearchChange={setSearch}
+        statusFilter={status}
+        onStatusChange={setStatus}
+        categoryFilter={category}
+        onCategoryChange={setCategory}
+      />
     </div>
   );
 }
