@@ -30,13 +30,13 @@ export function useRealtimeSubscription({
       // Create a unique channel name to avoid conflicts if needed, 
       // or use the provided one to allow shared channels
       const finalChannelName = `${channelName}-${Date.now()}`;
-      
+
       channel = supabase
         .channel(finalChannelName)
         .on(
           'postgres_changes',
           {
-            event,
+            event: event as '*' | 'INSERT' | 'UPDATE' | 'DELETE',
             schema,
             table,
             filter,
