@@ -230,34 +230,81 @@ export const reportService = {
         return true;
     },
 
-    // Get report statistics
-    async getReportStats(): Promise<ReportStats | null> {
-        const { data, error } = await supabase
-            .from('reports')
-            .select('status, severity, category, created_at');
+    // Optimized Dashboard Stats: Count-only queries
+    async getDashboardStats(): Promise<ReportStats | null> {
+        try {
+            // Run counts in parallel for maximum speed
+            const [
+                { count: total },
+                { count: pending },
+                { count: resolved },
+                { count: rejected },
+                { count: high },
+                { count: medium },
+                { count: low }
+            ] = await Promise.all([
+                supabase.from('reports').select('*', { count: 'exact', head: true }),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('severity', 'high'),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('severity', 'medium'),
+                supabase.from('reports').select('*', { count: 'exact', head: true }).eq('severity', 'low')
+            ]);
 
-        if (error) {
-            console.error('Error fetching report stats:', error);
+            // For categories, we still need a group by. Supabase doesn't support GROUP BY easily without RPC.
+            // But we can just fetch the 'category' column for ALL reports as a lightweight alternative
+            // OR for now, just fetch categories for the last 1000 reports to approximate purely for speed.
+            // Let's assume fetching just the category column is fast enough for < 10k rows.
+            const { data: categories } = await supabase.from('reports').select('category');
+
+            const byCategory = (categories || []).reduce((acc: Record<string, number>, curr) => {
+                acc[curr.category] = (acc[curr.category] || 0) + 1;
+                return acc;
+            }, {});
+
+            return {
+                total: total || 0,
+                pending: pending || 0,
+                resolved: resolved || 0,
+                rejected: rejected || 0,
+                bySeverity: {
+                    high: high || 0,
+                    medium: medium || 0,
+                    low: low || 0
+                },
+                byCategory
+            };
+
+        } catch (error) {
+            console.error('Error fetching dashboard stats:', error);
             return null;
         }
+    },
 
-        const stats: ReportStats = {
-            total: data.length,
-            pending: data.filter(r => r.status === 'pending').length,
-            resolved: data.filter(r => r.status === 'resolved').length,
-            rejected: data.filter(r => r.status === 'rejected').length,
-            bySeverity: {
-                high: data.filter(r => r.severity === 'high').length,
-                medium: data.filter(r => r.severity === 'medium').length,
-                low: data.filter(r => r.severity === 'low').length,
-            },
-            byCategory: data.reduce((acc: Record<string, number>, report) => {
-                acc[report.category] = (acc[report.category] || 0) + 1;
-                return acc;
-            }, {}),
-        };
+    // Optimized Analytics Data: Fetch only necessary columns for a date range
+    async getAnalyticsData(days: number = 7): Promise<Partial<Report>[]> {
+        const dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - days);
 
-        return stats;
+        const { data, error } = await supabase
+            .from('reports')
+            .select('created_at, status, category') // Select ONLY needed columns
+            .gte('created_at', dateFrom.toISOString())
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching analytics data:', error);
+            return [];
+        }
+
+        return data || [];
+    },
+
+    // Existing getReportStats (Deprecating usage in favor of getDashboardStats)
+    async getReportStats(): Promise<ReportStats | null> {
+        // ... kept for compatibility but should be replaced
+        return this.getDashboardStats();
     },
 
     // Get recent reports

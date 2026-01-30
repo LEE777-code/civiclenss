@@ -23,15 +23,15 @@ const COLORS = ["#0D9488", "#10B981", "#F59E0B", "#EF4444", "#3B82F6", "#8B5CF6"
 
 export default function Analytics() {
   const [stats, setStats] = useState<ReportStats | null>(null);
-  const [reports, setReports] = useState<Report[]>([]);
+  const [reports, setReports] = useState<Partial<Report>[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         const [statsData, reportsData] = await Promise.all([
-          reportService.getReportStats(),
-          reportService.getReports(),
+          reportService.getDashboardStats(),
+          reportService.getAnalyticsData(7), // Get only last 7 days of relevant data
         ]);
         setStats(statsData);
         setReports(reportsData);
@@ -60,7 +60,7 @@ export default function Analytics() {
 
 
   // Generate daily trend from reports (last 7 days)
-  const dailyTrend = reports.reduce((acc: { day: string; reported: number; resolved: number }[], report: Report) => {
+  const dailyTrend = reports.reduce((acc: { day: string; reported: number; resolved: number }[], report: Partial<Report>) => {
     const day = new Date(report.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const existing = acc.find((item) => item.day === day);
 

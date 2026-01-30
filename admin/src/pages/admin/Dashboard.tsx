@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export default function Dashboard() {
-  const { admin } = useAuth();
+  const { adminEmail } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
   const [stats, setStats] = useState<ReportStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,7 +18,7 @@ export default function Dashboard() {
     try {
       const [reportsData, statsData] = await Promise.all([
         reportService.getRecentReports(10),
-        reportService.getReportStats(),
+        reportService.getDashboardStats(),
       ]);
       setReports(reportsData);
       setStats(statsData);
@@ -56,10 +56,10 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-foreground">
-          Welcome back, {admin?.name || "Admin"}
+          Welcome back, Admin
         </h1>
         <p className="text-muted-foreground">
-          You are managing reports for <span className="font-medium text-primary">{admin?.state || "your jurisdiction"}</span>
+          You are managing reports for <span className="font-medium text-primary">your jurisdiction</span>
         </p>
       </div>
 
