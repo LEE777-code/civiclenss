@@ -203,8 +203,8 @@ const MyReports = () => {
   const filteredReports = reports
     .filter((report) => {
       const matchesSearch =
-        report.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        report.category.toLowerCase().includes(searchQuery.toLowerCase());
+        (report.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (report.category || "").toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = filterStatus.length === 0 || filterStatus.includes(report.status);
       const matchesSeverity = filterSeverity.length === 0 || filterSeverity.includes(report.severity);
       return matchesSearch && matchesStatus && matchesSeverity;

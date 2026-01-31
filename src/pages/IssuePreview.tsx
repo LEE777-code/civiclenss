@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Tag, Eye, Edit, AlertTriangle, Loader2, Clock, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import sampleImage from "@/assets/pages/page_1.jpg";
 import { supabase } from "@/lib/supabase";
@@ -103,9 +103,12 @@ const IssuePreview = () => {
         image_url: formData.image || null,
         user_id: userId,
         upvotes: 0,
+        // Governance extensions
+        department_id: formData.departmentId || null,
+        priority: formData.priority || 'Medium',
+        sla_hours: formData.slaHours || null,
+        deadline: formData.deadline || null
       };
-
-
 
       const { data, error } = await supabase
         .from("reports")
@@ -265,6 +268,39 @@ const IssuePreview = () => {
           </div>
 
           <div className="h-px bg-border/50" />
+
+          {/* Department & SLA Section - NEW */}
+          {formData.departmentName && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Building2 size={18} className="text-primary" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm text-foreground font-medium">Assigned To</div>
+                  <div className="text-sm text-muted-foreground">{formData.departmentName}</div>
+                </div>
+              </div>
+              <div className="h-px bg-border/50" />
+            </>
+          )}
+
+          {formData.deadline && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Clock size={18} className="text-primary" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm text-foreground font-medium">Expected Resolution</div>
+                  <div className="text-sm text-muted-foreground">
+                    {new Date(formData.deadline).toLocaleDateString()} by {new Date(formData.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              </div>
+              <div className="h-px bg-border/50" />
+            </>
+          )}
 
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">

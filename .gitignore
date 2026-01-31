@@ -36,3 +36,6 @@ backend/.env.*
 # Firebase Configuration
 android/app/google-services.json
 google-services.json
+
+# Vite timestamp files
+*.timestamp*

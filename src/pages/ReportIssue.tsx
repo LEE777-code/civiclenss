@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Camera, MapPin, Eye, Sparkles, WifiOff } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
@@ -7,6 +7,24 @@ import SwipeWrapper from "@/components/SwipeWrapper";
 import { generateImageDescription, generateImageTitle, suggestCategory } from "@/services/geminiVision";
 import ImageModal from "@/components/ImageModal";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { supabase } from "@/lib/supabase";
+
+interface Department {
+  id: string;
+  name: string;
+  type: string;
+}
+
+const SLA_CONFIG: Record<string, number> = {
+  "Road Issues": 72, // 3 days
+  "Garbage & Cleanliness": 48, // 2 days
+  "Water / Drainage": 24, // 1 day
+  "Streetlight / Electricity": 6, // 6 hours
+  "Public Safety": 4, // 4 hours
+  "Public Facilities": 120, // 5 days
+  "Parks & Environment": 96, // 4 days
+  "Other": 168 // 7 days
+};
 
 
 const ReportIssue = () => {
@@ -45,6 +63,28 @@ const ReportIssue = () => {
   };
 
 
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
+
+  useEffect(() => {
+    // Fetch departments on mount
+    const fetchDepartments = async () => {
+      setLoadingDepartments(true);
+      const { data, error } = await supabase
+        .from('departments')
+        .select('*');
+
+      if (data) {
+        setDepartments(data);
+      } else if (error) {
+        console.error("Error fetching departments:", error);
+      }
+      setLoadingDepartments(false);
+    };
+
+    fetchDepartments();
+  }, []);
+
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
       toast.error("Please provide a title for the issue");
@@ -56,7 +96,26 @@ const ReportIssue = () => {
       return;
     }
 
-    navigate("/issue-preview", { state: { ...formData, image: selectedImage } });
+    // 1. Find assigned department
+    const assignedDept = departments.find(d => d.type === formData.category) || departments.find(d => d.name.includes("Municipal")) || null;
+    const departmentId = assignedDept?.id || null;
+    const departmentName = assignedDept?.name || "General Administration";
+
+    // 2. Calculate SLA & Deadline
+    const slaHours = SLA_CONFIG[formData.category] || 72; // Default 3 days
+    // Note: We calculate deadline here for PREVIEW purposes, but should also generate it on server-side or confirm on final submit
+    const deadline = new Date(Date.now() + slaHours * 60 * 60 * 1000).toISOString();
+
+    navigate("/issue-preview", {
+      state: {
+        ...formData,
+        image: selectedImage,
+        departmentId,
+        departmentName,
+        slaHours,
+        deadline
+      }
+    });
   };
 
   return (

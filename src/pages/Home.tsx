@@ -297,8 +297,8 @@ const Home = () => {
         <div className="space-y-3">
           {nearbyIssues
             .filter(issue =>
-              issue.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              issue.severity.toLowerCase().includes(searchQuery.toLowerCase())
+              (issue.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (issue.severity || "").toLowerCase().includes(searchQuery.toLowerCase())
             )
             .map((issue) => {
               // Dynamic severity colors
@@ -336,8 +336,8 @@ const Home = () => {
               );
             })}
           {nearbyIssues.filter(issue =>
-            issue.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            issue.severity.toLowerCase().includes(searchQuery.toLowerCase())
+            (issue.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (issue.severity || "").toLowerCase().includes(searchQuery.toLowerCase())
           ).length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 No issues found matching "{searchQuery}"
