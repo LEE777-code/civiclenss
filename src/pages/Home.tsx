@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, Cloud, CloudRain, CloudSnow, CloudLightning } from "lucide-react";
+import { Search, MapPin, Sun, FileText, List, Bell, Map, ChevronRight, Cloud, CloudRain, CloudSnow, CloudLightning, Globe } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import BottomNav from "@/components/BottomNav";
 import SwipeWrapper from "@/components/SwipeWrapper";
@@ -9,10 +9,12 @@ import { getCategoryIcon } from "@/utils/categoryIcons";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { cacheHomeReports, getCachedHomeReports, cacheWeatherData, getCachedWeatherData, cacheReportStats, getCachedReportStats } from "@/services/offlineService";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Home = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { t, language, setLanguage } = useLanguage();
   const isOnline = useOnlineStatus();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [lastLocation, setLastLocation] = useState<string | null>(null);
@@ -207,10 +209,10 @@ const Home = () => {
   };
 
   const quickActions = [
-    { icon: FileText, label: "Report an Issue", desc: "Submit a new report", path: "/report", color: "bg-primary" },
-    { icon: List, label: "My Reports", desc: "Track your submissions", path: "/my-reports", color: "bg-blue-500" },
-    { icon: Bell, label: "Nearby Alerts", desc: "See local updates", path: "/alerts", color: "bg-amber-500" },
-    { icon: Map, label: "Map View", desc: "Explore issues visually", path: "/map", color: "bg-emerald-500" },
+    { icon: FileText, label: t("home.reportIssue"), desc: t("home.reportDesc"), path: "/report", color: "bg-primary" },
+    { icon: List, label: t("home.myReports"), desc: t("home.myReportsDesc"), path: "/my-reports", color: "bg-blue-500" },
+    { icon: Bell, label: t("home.nearby"), desc: t("home.nearbyDesc"), path: "/alerts", color: "bg-amber-500" },
+    { icon: Map, label: t("nav.map"), desc: "Explore issues visually", path: "/map", color: "bg-emerald-500" },
   ];
 
   return (
@@ -220,12 +222,23 @@ const Home = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-primary-foreground/80 text-sm">
-              Welcome back, {user?.firstName || "Citizen"}!
+              {t("home.welcome")}, {user?.firstName || "Citizen"}!
             </p>
           </div>
-          <div className="flex items-center gap-2 text-primary-foreground/80">
-            <MapPin size={16} />
-            <span className="text-sm">{weather ? weather.location : (lastLocation || "Anna Nagar, Chennai")}</span>
+          <div className="flex items-center gap-3">
+            {/* Language Toggle */}
+            <button
+              onClick={() => setLanguage(language === 'en' ? 'ta' : 'en')}
+              className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-lg text-primary-foreground text-xs hover:bg-white/20 transition-colors"
+            >
+              <Globe size={14} />
+              <span className="font-semibold">{language === 'en' ? 'EN' : 'தமிழ்'}</span>
+            </button>
+
+            <div className="flex items-center gap-2 text-primary-foreground/80">
+              <MapPin size={16} />
+              <span className="text-sm line-clamp-1 max-w-[100px]">{weather ? weather.location : (lastLocation || "Anna Nagar")}</span>
+            </div>
           </div>
         </div>
 
@@ -245,7 +258,7 @@ const Home = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
           <input
             type="text"
-            placeholder="Search issues, categories, updates..."
+            placeholder={t("myReports.search")}
             className="w-full bg-background rounded-xl pl-12 pr-4 py-3 text-sm placeholder:text-muted-foreground"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -277,7 +290,7 @@ const Home = () => {
       {/* Recent Updates */}
       {!searchQuery && (
         <div className="px-6 mt-6">
-          <h2 className="text-lg font-bold text-foreground mb-3">Recent Updates</h2>
+          <h2 className="text-lg font-bold text-foreground mb-3">{t("home.recentActivity")}</h2>
           <div className="flex gap-3">
             <div className="flex-1 card-elevated">
               <div className="text-2xl font-bold text-amber-500">{reportCounts.pending}</div>
@@ -293,7 +306,7 @@ const Home = () => {
 
       {/* Latest Issues Near You */}
       <div className="px-6 mt-6">
-        <h2 className="text-lg font-bold text-foreground mb-3">Latest Issues Near You</h2>
+        <h2 className="text-lg font-bold text-foreground mb-3">{t("home.nearby")}</h2>
         <div className="space-y-3">
           {nearbyIssues
             .filter(issue =>

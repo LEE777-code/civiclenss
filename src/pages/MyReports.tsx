@@ -10,11 +10,13 @@ import { useUser } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { generateReportPDF, downloadPDF } from "@/services/pdfService";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const MyReports = () => {
   const navigate = useNavigate();
   const { user } = useUser();
   const isOnline = useOnlineStatus();
+  const { t } = useLanguage();
   const [reports, setReports] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -230,7 +232,7 @@ const MyReports = () => {
           <button onClick={() => navigate(-1)} className="p-2 -ml-2">
             <ArrowLeft size={24} className="text-foreground" />
           </button>
-          <h1 className="text-xl font-bold text-foreground">My Reports</h1>
+          <h1 className="text-xl font-bold text-foreground">{t("myReports.title")}</h1>
         </div>
       </div>
 
@@ -240,7 +242,7 @@ const MyReports = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
           <input
             type="text"
-            placeholder="Search reports..."
+            placeholder={t("myReports.search")}
             className="input-field pl-12"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -255,7 +257,7 @@ const MyReports = () => {
               onClick={() => { setShowSortMenu(!showSortMenu); setShowFilterMenu(false); }}
             >
               <ArrowUpDown size={18} className="text-inherit" />
-              <span className="text-inherit">Sort</span>
+              <span className="text-inherit">{t("myReports.sort")}</span>
             </button>
 
             {/* Sort Menu */}
@@ -286,7 +288,7 @@ const MyReports = () => {
               onClick={() => { setShowFilterMenu(!showFilterMenu); setShowSortMenu(false); }}
             >
               <Filter size={18} className="text-inherit" />
-              <span className="text-inherit">Filter</span>
+              <span className="text-inherit">{t("myReports.filter")}</span>
               {(filterStatus.length > 0 || filterSeverity.length > 0) && (
                 <span className="bg-primary text-primary-foreground text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">
                   {filterStatus.length + filterSeverity.length}

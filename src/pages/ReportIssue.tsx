@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Camera, MapPin, Eye, Sparkles, WifiOff } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Eye, Sparkles, WifiOff, Mic, MicOff } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import SwipeWrapper from "@/components/SwipeWrapper";
-import { generateImageDescription, generateImageTitle, suggestCategory } from "@/services/geminiVision";
+import { generateImageDescription, generateImageTitle, suggestCategory, analyzeGrievance } from "@/services/geminiVision";
 import ImageModal from "@/components/ImageModal";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Department {
   id: string;
@@ -26,11 +27,11 @@ const SLA_CONFIG: Record<string, number> = {
   "Other": 168 // 7 days
 };
 
-
 const ReportIssue = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isOnline = useOnlineStatus();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState(location.state || {
     title: "",
     description: "",
@@ -45,6 +46,7 @@ const ReportIssue = () => {
   const [showImageOptions, setShowImageOptions] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -55,13 +57,54 @@ const ReportIssue = () => {
         const imageData = reader.result as string;
         setSelectedImage(imageData);
         setShowImageOptions(false);
-
-
       };
       reader.readAsDataURL(file);
     }
   };
 
+  const startVoiceInput = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      toast.error("Voice input is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new (window as any).webkitSpeechRecognition();
+    recognition.lang = 'en-US'; // Default to English for better accuracy in descriptions
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      toast.info("Listening... Speak now.");
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setFormData((prev: any) => ({
+        ...prev,
+        description: prev.description ? `${prev.description} ${transcript}` : transcript
+      }));
+      toast.success("Voice input added!");
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      if (event.error === 'no-speech') {
+        toast.info("No speech detected. Please tap to try again.");
+      } else if (event.error === 'not-allowed') {
+        toast.error("Microphone access denied. Please allow permissions.");
+      } else {
+        toast.error("Error hearing voice. Please try again.");
+      }
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
@@ -126,14 +169,14 @@ const ReportIssue = () => {
           <button onClick={() => navigate(-1)} className="p-2 -ml-2">
             <ArrowLeft size={24} className="text-foreground" />
           </button>
-          <h1 className="text-xl font-bold text-foreground">Report an Issue</h1>
+          <h1 className="text-xl font-bold text-foreground">{t("report.title")}</h1>
         </div>
       </div>
 
       <div className="px-6 py-4 space-y-6">
         {/* Add Photos */}
         <div>
-          <h2 className="text-lg font-semibold text-foreground mb-3">Add Photos</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-3">{t("report.addPhotos")}</h2>
 
           {selectedImage ? (
             <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-border">
@@ -165,7 +208,7 @@ const ReportIssue = () => {
 
         {/* Issue Details */}
         <div>
-          <h2 className="text-lg font-semibold text-foreground mb-3">Issue Details</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-3">{t("report.issueDetails")}</h2>
 
           <div className="space-y-4">
             {/* Offline Warning */}
@@ -193,7 +236,7 @@ const ReportIssue = () => {
             )}
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Issue Title</label>
+              <label className="text-sm font-medium text-foreground mb-2 block">{t("report.issueTitle")}</label>
               <input
                 type="text"
                 placeholder="e.g., Pothole on Main Street"
@@ -205,59 +248,75 @@ const ReportIssue = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Description</label>
-              <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground mb-2 block">{t("report.description")}</label>
+              <div className="flex items-center justify-between mb-2">
                 <label className="sr-only">Description</label>
-                <button
-                  onClick={async () => {
-                    if (!isOnline) {
-                      toast.error("AI analysis requires an internet connection");
-                      return;
-                    }
 
-                    if (!selectedImage) {
-                      toast.error("Please upload an image first");
-                      return;
-                    }
+                <div className="flex gap-3 ml-auto">
+                  {/* Voice Input Button */}
+                  <button
+                    onClick={startVoiceInput}
+                    className={`text-sm font-medium flex items-center gap-1 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-primary'}`}
+                    disabled={generating || isAnalyzing}
+                  >
+                    {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                    {isListening ? "Stop" : "Voice Input"}
+                  </button>
 
-                    setGenerating(true);
-                    setIsAnalyzing(true);
-                    toast.info("🤖 Analyzing image with AI...", { duration: 2000 });
+                  <button
+                    onClick={async () => {
+                      if (!isOnline) {
+                        toast.error("AI analysis requires an internet connection");
+                        return;
+                      }
 
-                    try {
-                      // Run all AI analyses in parallel
-                      // Note: We pass selectedImage (string) or selectedImageFile (File)
-                      // geminiVision.ts handles both, but let's prefer the file if available
-                      const input = selectedImageFile || selectedImage;
+                      if (!selectedImage) {
+                        toast.error("Please upload an image first");
+                        return;
+                      }
 
-                      const [description, title, category] = await Promise.all([
-                        generateImageDescription(input),
-                        generateImageTitle(input),
-                        suggestCategory(input)
-                      ]);
+                      setGenerating(true);
+                      setIsAnalyzing(true);
+                      toast.info("🤖 Analyzing image & context...", { duration: 2000 });
 
-                      setFormData(prev => ({
-                        ...prev,
-                        description: description,
-                        title: title,
-                        category: category
-                      }));
+                      try {
+                        const input = selectedImageFile || selectedImage;
 
-                      toast.success("✨ Analysis complete!");
-                    } catch (e) {
-                      console.error(e);
-                      const msg = (e as any)?.message || 'Error analyzing image';
-                      toast.error(msg);
-                    } finally {
-                      setGenerating(false);
-                      setIsAnalyzing(false);
-                    }
-                  }}
-                  className="text-sm text-primary font-medium ml-auto"
-                  disabled={generating || isAnalyzing || !isOnline}
-                >
-                  {generating ? "Analyzing..." : "Auto-fill with AI"}
-                </button>
+                        // Pass current description as context if available!
+                        const currentDescription = formData.description;
+
+                        // Use static import function
+                        const result = await analyzeGrievance(input, currentDescription);
+
+                        setFormData(prev => ({
+                          ...prev,
+                          description: result.description,
+                          title: result.title,
+                          category: result.category,
+                          severity: result.severity,
+                        }));
+
+                        // Show confidence if low
+                        if (result.confidence < 0.6) {
+                          toast.warning("Low confidence analysis. Please verify details.");
+                        } else {
+                          toast.success("✨ Analysis complete!");
+                        }
+
+                      } catch (e) {
+                        console.error(e);
+                        toast.error("Analysis failed. Please try again manually.");
+                      } finally {
+                        setGenerating(false);
+                        setIsAnalyzing(false);
+                      }
+                    }}
+                    className="text-sm text-primary font-medium"
+                    disabled={generating || isAnalyzing || !isOnline}
+                  >
+                    {generating ? t("report.analyzing") : t("report.analyze")}
+                  </button>
+                </div>
               </div>
               <textarea
                 placeholder="Provide a detailed description of the issue."
@@ -269,7 +328,7 @@ const ReportIssue = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Location</label>
+              <label className="text-sm font-medium text-foreground mb-2 block">{t("report.location")}</label>
               <div className="relative">
                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
                 <input
@@ -288,7 +347,7 @@ const ReportIssue = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Category</label>
+              <label className="text-sm font-medium text-foreground mb-2 block">{t("report.category")}</label>
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
@@ -296,19 +355,27 @@ const ReportIssue = () => {
                 disabled={isAnalyzing}
               >
                 <option value="">Select Category</option>
-                <option value="Road Issues">Road Issues</option>
-                <option value="Garbage & Cleanliness">Garbage & Cleanliness</option>
-                <option value="Water / Drainage">Water / Drainage</option>
-                <option value="Streetlight / Electricity">Streetlight / Electricity</option>
-                <option value="Public Safety">Public Safety</option>
-                <option value="Public Facilities">Public Facilities</option>
-                <option value="Parks & Environment">Parks & Environment</option>
+                <option value="Roads & Maintenance">Roads & Maintenance</option>
+                <option value="Streetlights & Electricity">Streetlights & Electricity</option>
+                <option value="Water Supply">Water Supply</option>
+                <option value="Drainage & Storm Water">Drainage & Storm Water</option>
+                <option value="Garbage & Sanitation">Garbage & Sanitation</option>
+                <option value="Public Health & Hygiene">Public Health & Hygiene</option>
+                <option value="Parks & Playgrounds">Parks & Playgrounds</option>
+                <option value="Public Transport">Public Transport</option>
+                <option value="Traffic & Road Safety">Traffic & Road Safety</option>
+                <option value="Encroachment">Encroachment</option>
+                <option value="Stray Animals">Stray Animals</option>
+                <option value="Revenue & Tax">Revenue & Tax</option>
+                <option value="Building Plan Violations">Building Plan Violations</option>
+                <option value="Trees & Environment">Trees & Environment</option>
+                <option value="Disaster Management">Disaster Management</option>
                 <option value="Other">Other</option>
               </select>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-foreground mb-3 block">Severity</label>
+              <label className="text-sm font-medium text-foreground mb-3 block">{t("report.severity")}</label>
               <div className="flex gap-2">
                 {["Low", "Medium", "High"].map((level) => (
                   <button
@@ -354,7 +421,7 @@ const ReportIssue = () => {
           className="btn-primary flex items-center justify-center gap-2"
         >
           <Eye size={20} />
-          Preview
+          {t("report.submit")}
         </button>
         <p className="text-center text-sm text-muted-foreground -mt-2">Tap to preview before final submission</p>
       </div>

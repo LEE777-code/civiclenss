@@ -8,145 +8,196 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// System Instruction from user snippet
-const SYSTEM_INSTRUCTION_DESC = `You are an assistant that analyzes civic infrastructure issues from images. Your job is to examine the image and produce a short, clear description of the visible problem for a public civic report.
+// Using gemini-3-flash-preview as explicitly requested by user
+const MODEL_NAME = 'gemini-3-flash-preview';
 
-Follow these rules:
-1. Write only 1–2 sentences.
-2. Focus on the core civic issue (pothole, garbage overflow, drainage problem, broken streetlight, structural hazard, road damage, water stagnation, etc.).
-3. Avoid assumptions about location unless visually clear.
-4. Do not mention the camera, angle, or colors unless important to the issue.
-5. Keep the description simple enough for any citizen or municipal worker to understand.
+export type Department =
+    | "Electricity (TNEB)"
+    | "Water Board"
+    | "Municipality / Corporation"
+    | "Roads & Highways"
+    | "Sanitation"
+    | "Public Works Department (PWD)"
+    | "General Civic";
 
-Output Format:
-Description: <your short description here>`;
+export type Severity = "Emergency" | "High" | "Medium" | "Low";
+
+export interface GrievanceAnalysis {
+    title: string;
+    department: Department;
+    category: string;
+    severity: Severity;
+    confidence: number;
+    description: string;
+}
+
+
+const SYSTEM_INSTRUCTION = `
+You are an AI assistant embedded in a Citizen Grievance Reporting System used by the Government.
+Your role is to analyze civic issue images and optional voice/text input submitted by citizens and return structured, reliable, and governance-ready outputs.
+
+🎯 TASK OBJECTIVE
+Analyze the provided image and optional text/voice input to identify civic issues (road damage, garbage, power line, water leak, etc.).
+
+🏛️ ALLOWED DEPARTMENTS / CATEGORIES (STRICT - CHOOSE ONE)
+1. Roads & Maintenance (Potholes, Damaged Roads, Footpath issues)
+2. Streetlights & Electricity (Non-functioning lights, Dangling wires, TNEB issues)
+3. Water Supply (Leakage, No Supply, Quality issues)
+4. Drainage & Storm Water (Blocked drains, Sewage overflow, Stagnant water)
+5. Garbage & Sanitation (Overflowing bins, Illegal dumping, Sweeping needed)
+6. Public Health & Hygiene (Dead animals, Mosquito breeding, Public urination)
+7. Parks & Playgrounds (Broken equipment, Maintenance, Overgrown bushes)
+8. Public Transport (Bus stops, Shelters, Accessibility)
+9. Traffic & Road Safety (Broken signals, Signboards, Illegal parking)
+10. Encroachment (Illegal structures on public land, Footpath blocking)
+11. Stray Animals (Aggressive dogs, Cattle nuisance)
+12. Revenue & Tax (Property tax issues, Assessment)
+13. Building Plan Violations (Illegal construction, Deviation)
+14. Trees & Environment (Fallen trees, Pruning needed, Pollution)
+15. Disaster Management (Flooding, Fire hazards, Landslides)
+
+⚠️ SEVERITY RULES (STRICT)
+- Emergency: Fallen electric wires, Major power outage, Flooding, Open manholes.
+- High: Water leakage, Road collapse, Sewage overflow.
+- Medium: Garbage pile, Broken streetlight.
+- Low: Cleanliness issues, Minor cracks.
+
+Never exaggerate severity.
+
+🧾 OUTPUT FORMAT (STRICT JSON)
+You must respond in valid JSON only with exactly these fields:
+{
+  "title": "Short issue title",
+  "department": "One of the allowed categories from the list above",
+  "category": "Exact Category Name from the list above",
+  "severity": "Emergency/High/Medium/Low",
+  "confidence": 0.0 to 1.0,
+  "description": "Clear, simple explanation suitable for government records"
+}
+
+🛡️ FAIL-SAFE BEHAVIOR
+If the image is unclear, not a civic issue, or confidence is < 0.6, return:
+{
+  "title": "Civic Issue Reported",
+  "department": "Other",
+  "category": "Other",
+  "severity": "Medium",
+  "confidence": 0.4,
+  "description": "The reported image could not be clearly classified. Manual review required."
+}
+
+🌐 LANGUAGE HANDLING
+If user input is in Tamil, respond in English. Keep descriptions simple and formal. 
+
+🚫 HARD CONSTRAINTS
+- Do NOT invent locations.
+- Do NOT mention AI, Gemini, or models.
+- Do NOT include legal advice or blame citizens.
+- respond ONLY with the JSON object.
+`;
+
 
 /**
- * Generate a description using Gemini with specific System Instructions
+ * Helper to process image input (File or base64 string) into format for Gemini
  */
-export async function generateImageDescription(imageData: string | File): Promise<string> {
-    try {
-        let base64Content: string;
-        let mimeType: string = "image/jpeg";
+async function processImageInput(imageData: string | File): Promise<{ base64: string; mimeType: string }> {
+    let base64Content: string;
+    let mimeType: string = "image/jpeg";
 
-        if (imageData instanceof File) {
-            // Convert File to base64
-            const buffer = await imageData.arrayBuffer();
-            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-            mimeType = imageData.type;
-        } else {
-            // Handle data URL string
-            const split = imageData.split(',');
+    if (imageData instanceof File) {
+        const buffer = await imageData.arrayBuffer();
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i += 1024) {
+            binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + 1024, len))));
+        }
+        base64Content = btoa(binary);
+        mimeType = imageData.type;
+    } else {
+        const split = imageData.split(',');
+        if (split.length > 1) {
             base64Content = split[1];
             const mimeMatch = split[0].match(/:(.*?);/);
             if (mimeMatch) mimeType = mimeMatch[1];
+        } else {
+            base64Content = imageData;
         }
+    }
+
+    if (!mimeType || mimeType === 'application/octet-stream') {
+        mimeType = 'image/jpeg';
+    }
+
+    return { base64: base64Content, mimeType };
+}
+
+export const analyzeGrievance = async (
+    imageData: string | File,
+    description?: string
+): Promise<GrievanceAnalysis> => {
+    try {
+        const { base64, mimeType } = await processImageInput(imageData);
+
+        const prompt = description
+            ? `Analyze this civic issue. Image provided. Optional citizen context: "${description}"`
+            : "Analyze this civic issue. Image provided.";
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-preview-09-2025',
+            model: MODEL_NAME,
             contents: {
                 parts: [
                     {
                         inlineData: {
-                            data: base64Content,
                             mimeType: mimeType,
+                            data: base64,
                         },
                     },
-                    {
-                        text: "Analyze this image for civic infrastructure issues."
-                    },
-                ],
-            },
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION_DESC,
-            },
-        });
-
-        const text = response.text || "No description generated";
-        return text.replace(/^Description:\s*/i, '').trim();
-
-    } catch (error: any) {
-        console.error("Gemini API Error (Description):", error);
-        throw new Error(error.message || "Failed to generate description");
-    }
-}
-
-/**
- * Generate a Title
- */
-export async function generateImageTitle(imageData: string | File): Promise<string> {
-    try {
-        let base64Content: string;
-        let mimeType: string = "image/jpeg";
-
-        if (imageData instanceof File) {
-            const buffer = await imageData.arrayBuffer();
-            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-            mimeType = imageData.type;
-        } else {
-            const split = imageData.split(',');
-            base64Content = split[1];
-            const mimeMatch = split[0].match(/:(.*?);/);
-            if (mimeMatch) mimeType = mimeMatch[1];
-        }
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-preview-09-2025',
-            contents: {
-                parts: [
-                    { inlineData: { data: base64Content, mimeType: mimeType } },
-                    { text: "Suggest a brief, clear title (max 8 words) for this civic issue. Output ONLY the title." }
-                ]
-            }
-        });
-
-        return response.text ? response.text.trim() : "Report Issue";
-    } catch (error) {
-        console.error("Gemini API Error (Title):", error);
-        return "Report Issue";
-    }
-}
-
-/**
- * Suggest a Category
- */
-export async function suggestCategory(imageData: string | File): Promise<string> {
-    try {
-        let base64Content: string;
-        let mimeType: string = "image/jpeg";
-
-        if (imageData instanceof File) {
-            const buffer = await imageData.arrayBuffer();
-            base64Content = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-            mimeType = imageData.type;
-        } else {
-            const split = imageData.split(',');
-            base64Content = split[1];
-            const mimeMatch = split[0].match(/:(.*?);/);
-            if (mimeMatch) mimeType = mimeMatch[1];
-        }
-
-        const prompt = `Categorize this civic issue into ONE of: Road Issues, Garbage & Cleanliness, Water / Drainage, Streetlight / Electricity, Public Safety, Public Facilities, Parks & Environment, Other. Output ONLY the category name.`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-preview-09-2025',
-            contents: {
-                parts: [
-                    { inlineData: { data: base64Content, mimeType: mimeType } },
                     { text: prompt }
                 ]
-            }
+            },
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION,
+                responseMimeType: "application/json",
+                temperature: 0.1,
+            },
         });
 
-        const text = response.text ? response.text.trim() : "Other";
+        const respAny = response as any;
+        const text = typeof respAny.text === 'function' ? respAny.text() : respAny.text;
 
-        // Simple validation
-        const valid = ["Road Issues", "Garbage & Cleanliness", "Water", "Drainage", "Streetlight", "Electricity", "Public Safety", "Public Facilities", "Parks", "Environment"];
-        if (valid.some(v => text.includes(v))) return text;
-        return "Other";
+        if (!text) {
+            throw new Error("No response from analysis engine.");
+        }
+
+        const cleanText = text.replace(/```json|```/gi, "").trim();
+        return JSON.parse(cleanText) as GrievanceAnalysis;
 
     } catch (error) {
-        console.error("Gemini API Error (Category):", error);
-        return "Other";
+        console.error("Gemini Analysis Error:", error);
+        return {
+            title: "Analysis Failure",
+            department: "General Civic",
+            category: "System Error",
+            severity: "Medium",
+            confidence: 0,
+            description: "Critical system error during analysis. Manual verification required immediately."
+        };
     }
+};
+
+// Re-export wrappers for legacy compatibility
+export async function generateImageDescription(imageData: string | File): Promise<string> {
+    const result = await analyzeGrievance(imageData);
+    return result.description;
+}
+
+export async function generateImageTitle(imageData: string | File): Promise<string> {
+    const result = await analyzeGrievance(imageData);
+    return result.title;
+}
+
+export async function suggestCategory(imageData: string | File): Promise<string> {
+    const result = await analyzeGrievance(imageData);
+    return result.category;
 }

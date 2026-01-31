@@ -57,6 +57,27 @@ const initDB = async (): Promise<SQLiteDBConnection> => {
         // Initialize SQLite connection
         sqliteConnection = new SQLiteConnection(CapacitorSQLite);
 
+        // Web Platform: Ensure jeep-sqlite is present and ready
+        if (Capacitor.getPlatform() === 'web') {
+            // Dynamically import loader to avoid import errors on native
+            const { defineCustomElements } = await import('jeep-sqlite/loader');
+            defineCustomElements(window);
+
+            let jeepEl = document.querySelector('jeep-sqlite');
+
+            if (!jeepEl) {
+                console.log('⚠️ jeep-sqlite element not found, injecting dynamically...');
+                jeepEl = document.createElement('jeep-sqlite');
+                document.body.appendChild(jeepEl);
+            }
+
+            // Wait for element to be ready
+            await customElements.whenDefined('jeep-sqlite');
+
+            // Short wait to ensure DOM update
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
         // Check if database exists, if not create it
         const ret = await sqliteConnection.checkConnectionsConsistency();
         const isConn = (await sqliteConnection.isConnection(DB_NAME, false)).result;

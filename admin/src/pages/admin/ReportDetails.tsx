@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar, User, Tag, AlertCircle, CheckCircle2, XCircle, Clock, Loader2, Eye, Send, Mail } from "lucide-react";
-import { reportService, Report } from "@/services/reportService";
+import { reportService, Report, AuditLog } from "@/services/reportService";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +26,7 @@ export default function ReportDetailsPage() {
     const [officers, setOfficers] = useState<Officer[]>([]);
     const [showAssignDialog, setShowAssignDialog] = useState(false);
     const [selectedOfficer, setSelectedOfficer] = useState<Officer | null>(null);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
     const fetchReport = async () => {
         if (!id) return;
@@ -36,6 +37,9 @@ export default function ReportDetailsPage() {
                 setReport(data);
                 // Mark as viewed by admin
                 await reportService.markAsViewedByAdmin(id);
+                // Fetch audit logs
+                const logs = await reportService.getAuditLogs(id);
+                setAuditLogs(logs);
             } else {
                 toast.error("Report not found");
                 navigate("/admin/issues");
@@ -306,6 +310,37 @@ export default function ReportDetailsPage() {
                 )}
             </div>
 
+            {/* Escalation Banner */}
+            {report.escalated && (
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center justify-between animate-pulse">
+                    <div className="flex items-center gap-3">
+                        <AlertCircle className="h-5 w-5" />
+                        <div>
+                            <h3 className="font-bold">⚠️ Report Escalated</h3>
+                            <p className="text-sm">This report has exceeded its SLA deadline and has been escalated to higher authorities.</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-xs font-semibold">Escalated At</p>
+                        <p className="text-sm">{report.escalated_at ? new Date(report.escalated_at).toLocaleString() : 'N/A'}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Deadline Banner */}
+            {!report.escalated && report.deadline && report.status === 'pending' && (
+                <div className="bg-blue-50 border border-blue-100 text-blue-800 px-4 py-3 rounded-lg flex items-center gap-3">
+                    <Clock className="h-5 w-5" />
+                    <div>
+                        <h3 className="font-semibold">SLA Deadline</h3>
+                        <p className="text-sm">
+                            Due by: <strong>{new Date(report.deadline).toLocaleString()}</strong>
+                            ({new Date(report.deadline) < new Date() ? "Overdue" : "In Progress"})
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-6">
@@ -535,185 +570,221 @@ export default function ReportDetailsPage() {
                 </div>
             </div>
 
-            {/* Resolve Dialog */}
-            {showResolveDialog && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-background rounded-xl max-w-md w-full p-6 shadow-2xl">
-                        <h2 className="text-xl font-bold text-foreground mb-2">Mark as Resolved</h2>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Please upload a proof image to confirm the resolution of this issue.
-                        </p>
-
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2">Proof Image (Required)</label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleProofImageChange}
-                                className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                            />
+            {/* Audit Logs Section */}
+            <div className="max-w-4xl mx-auto mt-8">
+                <h3 className="text-xl font-bold mb-4">📜 Audit History</h3>
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+                    {auditLogs.length === 0 ? (
+                        <div className="p-6 text-center text-muted-foreground">No activity recorded.</div>
+                    ) : (
+                        <div className="divide-y divide-border">
+                            {auditLogs.map((log) => (
+                                <div key={log.id} className="p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors">
+                                    <div className="bg-primary/10 p-2 rounded-full">
+                                        <Clock className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between">
+                                            <p className="font-semibold text-sm">{log.action.replace(/_/g, ' ')}</p>
+                                            <span className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</span>
+                                        </div>
+                                        <p className="text-sm text-foreground mt-1">
+                                            {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            by {log.admin_name || log.admin_id || 'System'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
+                    )}
+                </div>
+            </div>
 
-                        {proofImagePreview && (
+            {/* Resolve Dialog */}
+            {
+                showResolveDialog && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-background rounded-xl max-w-md w-full p-6 shadow-2xl">
+                            <h2 className="text-xl font-bold text-foreground mb-2">Mark as Resolved</h2>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Please upload a proof image to confirm the resolution of this issue.
+                            </p>
+
                             <div className="mb-4">
-                                <img
-                                    src={proofImagePreview}
-                                    alt="Preview"
-                                    className="w-full h-48 object-cover rounded-lg border border-border"
+                                <label className="block text-sm font-medium mb-2">Proof Image (Required)</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleProofImageChange}
+                                    className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                                 />
                             </div>
-                        )}
 
-                        <div className="flex justify-end gap-3 mt-6">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setShowResolveDialog(false);
-                                    setProofImage(null);
-                                    setProofImagePreview(null);
-                                }}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                onClick={handleResolveReport}
-                                disabled={updating || !proofImage}
-                            >
-                                {updating ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        Resolving...
-                                    </>
-                                ) : (
-                                    'Confirm Resolution'
-                                )}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Officer Assignment Dialog */}
-            {showAssignDialog && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-background rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
-                        {/* Header */}
-                        <div className="p-6 border-b border-border">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-bold text-foreground">Assign to Officer</h2>
-                                <button
-                                    onClick={() => {
-                                        setShowAssignDialog(false);
-                                        setSelectedOfficer(null);
-                                    }}
-                                    className="text-muted-foreground hover:text-foreground"
-                                >
-                                    <XCircle className="h-6 w-6" />
-                                </button>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-2">
-                                Select an admin to assign this report via WhatsApp
-                            </p>
-                        </div>
-
-                        {/* Officers List */}
-                        <div className="flex-1 overflow-y-auto p-6">
-                            {officers.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                                    <p className="text-muted-foreground">No officers available</p>
-                                    <p className="text-sm text-muted-foreground mt-2">
-                                        Add phone numbers to admin accounts to enable assignments
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {officers.map((officer) => (
-                                        <div
-                                            key={officer.id}
-                                            className={`rounded-lg border p-4 cursor-pointer transition-all ${selectedOfficer?.id === officer.id
-                                                ? 'border-primary bg-primary/5'
-                                                : 'border-border hover:border-primary/50'
-                                                }`}
-                                            onClick={() => setSelectedOfficer(officer)}
-                                        >
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <h3 className="font-semibold text-foreground">
-                                                        {officer.name}
-                                                    </h3>
-                                                    <p className="text-sm text-muted-foreground mt-1">
-                                                        {officer.email}
-                                                    </p>
-                                                    <div className="flex flex-wrap gap-2 mt-2">
-                                                        {officer.department && (
-                                                            <span className="text-xs px-2 py-1 bg-muted rounded-full">
-                                                                🏢 {officer.department}
-                                                            </span>
-                                                        )}
-                                                        <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                                                            {officer.role}
-                                                        </span>
-                                                        {officer.state && (
-                                                            <span className="text-xs px-2 py-1 bg-muted rounded-full">
-                                                                📍 {officer.state}
-                                                                {officer.district && `, ${officer.district}`}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground mt-2">
-                                                        📱 {officer.phone}
-                                                    </p>
-                                                </div>
-                                                {selectedOfficer?.id === officer.id && (
-                                                    <div className="shrink-0">
-                                                        <CheckCircle2 className="h-5 w-5 text-primary" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
+                            {proofImagePreview && (
+                                <div className="mb-4">
+                                    <img
+                                        src={proofImagePreview}
+                                        alt="Preview"
+                                        className="w-full h-48 object-cover rounded-lg border border-border"
+                                    />
                                 </div>
                             )}
-                        </div>
 
-                        {/* Footer */}
-                        <div className="p-6 border-t border-border">
-                            <div className="flex flex-col gap-3">
-                                <div className="flex gap-3">
-                                    <Button
-                                        onClick={handleAssignOfficer}
-                                        disabled={!selectedOfficer}
-                                        className="flex-1"
-                                    >
-                                        <Send className="h-4 w-4 mr-2" />
-                                        Send via WhatsApp
-                                    </Button>
-                                    <Button
-                                        onClick={handleAssignOfficerEmail}
-                                        disabled={!selectedOfficer}
-                                        className="flex-1"
-                                        variant="secondary"
-                                    >
-                                        <Mail className="h-4 w-4 mr-2" />
-                                        Send via Email
-                                    </Button>
-                                </div>
+                            <div className="flex justify-end gap-3 mt-6">
                                 <Button
                                     variant="outline"
                                     onClick={() => {
-                                        setShowAssignDialog(false);
-                                        setSelectedOfficer(null);
+                                        setShowResolveDialog(false);
+                                        setProofImage(null);
+                                        setProofImagePreview(null);
                                     }}
-                                    className="w-full"
                                 >
                                     Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleResolveReport}
+                                    disabled={updating || !proofImage}
+                                >
+                                    {updating ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Resolving...
+                                        </>
+                                    ) : (
+                                        'Confirm Resolution'
+                                    )}
                                 </Button>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Officer Assignment Dialog */}
+            {
+                showAssignDialog && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-background rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
+                            {/* Header */}
+                            <div className="p-6 border-b border-border">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-xl font-bold text-foreground">Assign to Officer</h2>
+                                    <button
+                                        onClick={() => {
+                                            setShowAssignDialog(false);
+                                            setSelectedOfficer(null);
+                                        }}
+                                        className="text-muted-foreground hover:text-foreground"
+                                    >
+                                        <XCircle className="h-6 w-6" />
+                                    </button>
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Select an admin to assign this report via WhatsApp
+                                </p>
+                            </div>
+
+                            {/* Officers List */}
+                            <div className="flex-1 overflow-y-auto p-6">
+                                {officers.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                        <p className="text-muted-foreground">No officers available</p>
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            Add phone numbers to admin accounts to enable assignments
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {officers.map((officer) => (
+                                            <div
+                                                key={officer.id}
+                                                className={`rounded-lg border p-4 cursor-pointer transition-all ${selectedOfficer?.id === officer.id
+                                                    ? 'border-primary bg-primary/5'
+                                                    : 'border-border hover:border-primary/50'
+                                                    }`}
+                                                onClick={() => setSelectedOfficer(officer)}
+                                            >
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-semibold text-foreground">
+                                                            {officer.name}
+                                                        </h3>
+                                                        <p className="text-sm text-muted-foreground mt-1">
+                                                            {officer.email}
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2 mt-2">
+                                                            {officer.department && (
+                                                                <span className="text-xs px-2 py-1 bg-muted rounded-full">
+                                                                    🏢 {officer.department}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                                                                {officer.role}
+                                                            </span>
+                                                            {officer.state && (
+                                                                <span className="text-xs px-2 py-1 bg-muted rounded-full">
+                                                                    📍 {officer.state}
+                                                                    {officer.district && `, ${officer.district}`}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground mt-2">
+                                                            📱 {officer.phone}
+                                                        </p>
+                                                    </div>
+                                                    {selectedOfficer?.id === officer.id && (
+                                                        <div className="shrink-0">
+                                                            <CheckCircle2 className="h-5 w-5 text-primary" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-6 border-t border-border">
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-3">
+                                        <Button
+                                            onClick={handleAssignOfficer}
+                                            disabled={!selectedOfficer}
+                                            className="flex-1"
+                                        >
+                                            <Send className="h-4 w-4 mr-2" />
+                                            Send via WhatsApp
+                                        </Button>
+                                        <Button
+                                            onClick={handleAssignOfficerEmail}
+                                            disabled={!selectedOfficer}
+                                            className="flex-1"
+                                            variant="secondary"
+                                        >
+                                            <Mail className="h-4 w-4 mr-2" />
+                                            Send via Email
+                                        </Button>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowAssignDialog(false);
+                                            setSelectedOfficer(null);
+                                        }}
+                                        className="w-full"
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

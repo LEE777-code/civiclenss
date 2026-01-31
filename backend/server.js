@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 // Imports removed
 import { createClient } from '@supabase/supabase-js';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -678,6 +679,166 @@ app.get('/api/notifications/tokens/:userId', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// ============================================
+// GOVERNANCE & SLA FEATURES
+// ============================================
+
+// Helper: Calculate Deadline based on Severity
+function calculateSLA(severity) {
+  const now = new Date();
+  switch (severity?.toLowerCase()) {
+    case 'high':
+      now.setHours(now.getHours() + 24); // 24 hours
+      return now;
+    case 'medium':
+      now.setDate(now.getDate() + 3); // 3 days
+      return now;
+    case 'low':
+      now.setDate(now.getDate() + 7); // 7 days
+      return now;
+    default:
+      now.setDate(now.getDate() + 7); // Default to 7 days
+      return now;
+  }
+}
+
+// 1. Audit Logging Endpoint
+app.post('/api/audit-logs', async (req, res) => {
+  const { reportId, adminId, action, details, adminName } = req.body;
+
+  try {
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert({
+        report_id: reportId,
+        admin_id: adminId,
+        admin_name: adminName,
+        action: action,
+        details: details
+      });
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Audit log recorded' });
+  } catch (err) {
+    console.error('Audit log error:', err);
+    res.status(500).json({ error: 'Failed to record audit log' });
+  }
+});
+
+// 2. Fetch Audit Logs Endpoint
+app.get('/api/reports/:id/audit-logs', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('report_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('Fetch audit logs error:', err);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// 3. Auto-Escalation Cron Job (Runs every 10 minutes)
+cron.schedule('*/10 * * * *', async () => {
+  console.log('⏳ Running Auto-Escalation Check...');
+
+  try {
+    const now = new Date().toISOString();
+
+    // Find overdue pending reports not yet escalated
+    const { data: overdueReports, error } = await supabase
+      .from('reports')
+      .select('*')
+      .eq('status', 'pending')
+      .eq('escalated', false)
+      .lt('deadline', now);
+
+    if (error) throw error;
+
+    if (!overdueReports || overdueReports.length === 0) {
+      console.log('✅ No overdue reports found.');
+      return;
+    }
+
+    console.log(`⚠️ Found ${overdueReports.length} overdue reports. Escalating...`);
+
+    for (const report of overdueReports) {
+      // 1. Mark as Escalated
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          escalated: true,
+          escalated_at: new Date().toISOString()
+        })
+        .eq('id', report.id);
+
+      if (updateError) {
+        console.error(`Failed to update report ${report.id}:`, updateError);
+        continue;
+      }
+
+      // 2. Log to Audit
+      await supabase.from('audit_logs').insert({
+        report_id: report.id,
+        admin_id: 'SYSTEM',
+        action: 'AUTO_ESCALATION',
+        details: `Report escalated due to missed SLA deadline of ${new Date(report.deadline).toLocaleString()}`
+      });
+
+      // 3. Notify Admins (Dynamic Lookup)
+      let recipientEmail = process.env.SMTP_USER;
+
+      try {
+        if (report.district) {
+          const { data: admins } = await supabase
+            .from('admins')
+            .select('email')
+            .eq('district', report.district)
+            .in('role', ['district', 'state', 'DISTRICT_ADMIN', 'STATE_ADMIN'])
+            .limit(1);
+
+          if (admins && admins.length > 0 && admins[0].email) {
+            recipientEmail = admins[0].email;
+            console.log(`📧 Found District Admin: ${recipientEmail}`);
+          }
+        }
+      } catch (lookupError) {
+        console.error('Failed to lookup admin email, defaulting to system:', lookupError);
+      }
+
+      const emailHtml = `
+        <h2>⚠️ Report Escalated: ${report.title}</h2>
+        <p>This report has exceeded its SLA deadline.</p>
+        <ul>
+          <li><strong>ID:</strong> ${report.id}</li>
+          <li><strong>Severity:</strong> ${report.severity}</li>
+          <li><strong>Deadline:</strong> ${new Date(report.deadline).toLocaleString()}</li>
+          <li><strong>Location:</strong> ${report.district || 'Unknown District'}, ${report.state || 'Unknown State'}</li>
+        </ul>
+        <p>Please take immediate action.</p>
+      `;
+
+      await transporter.sendMail({
+        from: `"${process.env.EMAIL_FROM_NAME || 'CivicLens System'}" <${process.env.SMTP_USER}>`,
+        to: recipientEmail,
+        subject: `[ESCALATED] Overdue Report: ${report.title}`,
+        html: emailHtml
+      });
+
+      console.log(`🚀 Escalated Report ${report.id} and notified ${recipientEmail}`);
+    }
+
+  } catch (err) {
+    console.error('❌ Escalation Job Failed:', err);
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

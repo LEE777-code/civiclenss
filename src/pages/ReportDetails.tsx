@@ -35,6 +35,7 @@ interface Report {
   description: string;
   status: string;
   date: string;
+  expectedResolution: string | null;
   location: string;
   image: string | null;
   upvotes: number;
@@ -100,6 +101,7 @@ const ReportDetails = () => {
             description: data.description,
             status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
             date: new Date(data.created_at).toLocaleString(),
+            expectedResolution: data.deadline ? new Date(data.deadline).toLocaleString() : null,
             location: data.location_name || "Unknown Location",
             image: data.image_url || null,
             upvotes: data.upvotes || 0,
@@ -146,6 +148,7 @@ const ReportDetails = () => {
             description: cachedData.description,
             status: cachedData.status.charAt(0).toUpperCase() + cachedData.status.slice(1),
             date: new Date(cachedData.created_at).toLocaleString(),
+            expectedResolution: cachedData.deadline ? new Date(cachedData.deadline).toLocaleString() : null,
             location: cachedData.location_name || "Unknown Location",
             image: cachedData.image_url || null,
             upvotes: cachedData.upvotes || 0,
@@ -465,6 +468,16 @@ const ReportDetails = () => {
             <p className="text-muted-foreground text-sm">{report.date}</p>
           </div>
 
+          {report.expectedResolution && (
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                <CheckCircle size={16} className="text-primary" />
+                Expected Resolution
+              </h3>
+              <p className="text-muted-foreground text-sm">{report.expectedResolution}</p>
+            </div>
+          )}
+
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
               <MapPin size={16} className="text-primary" />
@@ -480,18 +493,6 @@ const ReportDetails = () => {
                 <Building2 size={16} className="text-primary" />
                 Assigned Department
               </h3>
-              {/* We don't have the department name in state directly unless we fetched it. 
-                   Wait, fetchReport DID fetch name but didn't store it in a dedicated field, 
-                   Wait, I didn't update the Report interface to include department_name. 
-                   I will just show generic 'Assigned' or just rely on the ID check for now or fetch updates.
-                   Actually, fetchReport logic had: if (dept) deptName = dept.name; 
-                   Did I store it? No. I stored department_id. 
-                   I will rely on category mapping or just show 'Pending Assignment' if null.
-                   For now, let's skip displaying the name if I don't have it handy, or better yet,
-                   FetchReport stored it in variable `deptName` but didn't put it in `setReport`.
-                   I will skip displaying Name for now to avoid errors, and fix fetchReport in next turn or assume category implies dept.
-                */}
-              {/* Actually, let's just show the PRIORITY and DEADLINE which we have */}
             </div>
           )}
 
@@ -521,10 +522,14 @@ const ReportDetails = () => {
               )}
             </div>
           )}
-        </div>
+
+          <div className="pt-2 border-t border-border mt-2">
+            <p className="text-xs text-muted-foreground">Complaint ID: <span className="font-mono text-foreground">{report.id}</span></p>
+          </div>
+        </div >
 
         {/* Progress Status */}
-        <div className="card-elevated">
+        < div className="card-elevated" >
           <h3 className="text-sm font-semibold text-foreground mb-4">Progress Status</h3>
           <div className="space-y-4">
             {report.progress.map((step: ProgressStep, index: number) => (
@@ -564,9 +569,9 @@ const ReportDetails = () => {
               </div>
             ))}
           </div>
-        </div>
+        </div >
         {/* Timeline Updates */}
-        <div className="card-elevated">
+        < div className="card-elevated" >
           <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <MessageSquare size={16} className="text-primary" />
             Updates & Timeline
@@ -628,23 +633,26 @@ const ReportDetails = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div >
 
         {/* Contact Support */}
-        <button className="btn-primary flex items-center justify-center gap-2">
+        < button
+          onClick={() => navigate("/support")}
+          className="btn-primary flex items-center justify-center gap-2"
+        >
           <MessageSquare size={20} />
           Contact Support
-        </button>
-      </div>
+        </button >
+      </div >
 
       {/* Image Modal */}
-      <ImageModal
+      < ImageModal
         isOpen={imageModalOpen}
         imageUrl={report.image}
         onClose={() => setImageModalOpen(false)}
         altText={report.title}
       />
-    </div>
+    </div >
   );
 };
 

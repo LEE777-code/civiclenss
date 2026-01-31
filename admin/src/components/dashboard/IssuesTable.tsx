@@ -23,6 +23,7 @@ import { issueService } from "@/services/issueService";
 import { reportService } from "@/services/reportService";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 interface IssuesTableProps {
   issues: Issue[] | Report[];
@@ -37,18 +38,20 @@ interface IssuesTableProps {
 
 const statusStyles = {
   open: "status-open",
-  pending: "status-open", // Maps pending to open style
+  pending: "status-open",
   "in-progress": "status-progress",
   resolved: "status-resolved",
   rejected: "bg-muted text-muted-foreground",
+  escalated: "bg-destructive text-destructive-foreground animate-pulse",
 };
 
 const statusLabels = {
   open: "Open",
-  pending: "Pending", // Added pending label
+  pending: "Pending",
   "in-progress": "In Progress",
   resolved: "Resolved",
   rejected: "Rejected",
+  escalated: "Escalated",
 };
 
 const priorityStyles = {
@@ -82,7 +85,29 @@ export function IssuesTable({
 }: IssuesTableProps) {
   const { adminEmail } = useAuth();
   const navigate = useNavigate();
-  // Internal state removed - now controlled by parent
+
+  const [search, setSearch] = useState("");
+  // Renaming local state filters to avoid shadowing props if they are used, 
+  // but looking at implementation, props might be unused or this component is hybrid.
+  // The conflict showed these state variables being added in incoming change.
+  // We will keep them as local state for now as per the "Incoming" feature logic.
+  const [localStatusFilter, setLocalStatusFilter] = useState<string>("all");
+  const [localCategoryFilter, setLocalCategoryFilter] = useState<string>("all");
+  const [showAllDepartments, setShowAllDepartments] = useState<boolean>(true); // Default to true for demo flexibility, user requested auto-apply but also "Show All" toggle.
+  const [adminDepartment, setAdminDepartment] = useState<string | null>(null);
+
+  // Fetch admin department on mount
+  useState(() => {
+    const fetchAdminDetails = async () => {
+      if (!adminEmail) return;
+      const { data } = await supabase.from('admins').select('department').eq('email', adminEmail).single();
+      if (data?.department) {
+        setAdminDepartment(data.department);
+        setShowAllDepartments(false); // Auto-apply filter if department found
+      }
+    };
+    fetchAdminDetails();
+  });
 
   const handleStatusUpdate = async (issue: Issue | Report, newStatus: string) => {
     try {
@@ -120,8 +145,26 @@ export function IssuesTable({
     navigate(`/admin/issues/${issue.id}`);
   };
 
-  // Removed client-side filtering. Issues are now passed already filtered from the server.
-  const filteredIssues = issues;
+  const filteredIssues = issues.filter((issue) => {
+    const matchesSearch =
+      issue.title.toLowerCase().includes(search.toLowerCase()) ||
+      issue.id.toLowerCase().includes(search.toLowerCase()) ||
+      getLocation(issue).toLowerCase().includes(search.toLowerCase());
+
+    // Check local filters if props are "all" or undefined, otherwise potentially use props?
+    // The incoming change used local state: statusFilter, categoryFilter.
+    // However, props are named identically.
+    // The incoming change shadowed them: `const [statusFilter, setStatusFilter]...`
+    // We renamed local state to `localStatusFilter` to avoid linting errors, 
+    // so we should use those here.
+    const matchesStatus = localStatusFilter === "all" || issue.status === localStatusFilter;
+    const matchesCategory = localCategoryFilter === "all" || issue.category === localCategoryFilter;
+
+    // Soft Department Filter
+    const matchesDepartment = showAllDepartments || !adminDepartment || issue.category === adminDepartment;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesDepartment;
+  });
 
   const categories = ["Infrastructure", "Sanitation", "Environment", "Public Safety", "Transportation", "Other"];
 
@@ -132,20 +175,44 @@ export function IssuesTable({
         <h3 className="text-lg font-semibold text-foreground">
           {compact ? "Recent Issues" : "All Issues"}
         </h3>
-        {!compact && (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search issues..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange?.(e.target.value)}
-                className="pl-9 w-full sm:w-64"
-              />
-            </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 
+          {/* Department Toggle */}
+          {adminDepartment && (
+            <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-lg">
+              <button
+                onClick={() => setShowAllDepartments(false)}
+                className={cn(
+                  "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                  !showAllDepartments ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-muted text-muted-foreground"
+                )}
+              >
+                My Dept ({adminDepartment})
+              </button>
+              <button
+                onClick={() => setShowAllDepartments(true)}
+                className={cn(
+                  "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                  showAllDepartments ? "bg-background text-foreground shadow-sm border" : "hover:bg-muted text-muted-foreground"
+                )}
+              >
+                Show All
+              </button>
+            </div>
+          )}
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search issues..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 w-full sm:w-64"
+            />
+          </div>
+          {!compact && (
             <>
-              <Select value={statusFilter} onValueChange={onStatusChange}>
+              <Select value={localStatusFilter} onValueChange={setLocalStatusFilter}>
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -157,7 +224,7 @@ export function IssuesTable({
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={categoryFilter} onValueChange={onCategoryChange}>
+              <Select value={localCategoryFilter} onValueChange={setLocalCategoryFilter}>
                 <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
@@ -171,8 +238,8 @@ export function IssuesTable({
                 </SelectContent>
               </Select>
             </>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -205,6 +272,11 @@ export function IssuesTable({
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Date
               </th>
+              {!compact && (
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Status/SLA
+                </th>
+              )}
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Actions
               </th>
@@ -252,6 +324,23 @@ export function IssuesTable({
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
                   {new Date(issue.created_at).toLocaleDateString()}
                 </td>
+                {!compact && (
+                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                    {isReport(issue) && issue.escalated && (
+                      <span className="inline-flex items-center rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
+                        Escalated
+                      </span>
+                    )}
+                    {isReport(issue) && !issue.escalated && issue.deadline && (
+                      <span className={cn(
+                        "text-xs",
+                        new Date(issue.deadline) < new Date() ? "text-destructive font-bold" : "text-muted-foreground"
+                      )}>
+                        {new Date(issue.deadline) < new Date() ? "Overdue" : `Due: ${new Date(issue.deadline).toLocaleDateString()}`}
+                      </span>
+                    )}
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
