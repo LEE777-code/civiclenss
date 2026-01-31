@@ -38,6 +38,9 @@ const isAnonymous = (issue: Issue | Report): boolean => {
 };
 
 const getReporterName = (issue: Issue | Report): string => {
+  if ('user' in issue && issue.user?.full_name) {
+    return issue.user.full_name;
+  }
   if ('reporter_name' in issue) {
     return issue.reporter_name || 'Unknown';
   }
@@ -77,6 +80,9 @@ export function IssueSummaryPanel({ issue }: IssueSummaryPanelProps) {
           <User className="h-4 w-4 text-muted-foreground" />
           <span className="text-foreground">
             {isAnonymous(issue) ? "Anonymous" : getReporterName(issue)}
+            {('user' in issue && issue.user?.phone_number) && (
+              <span className="ml-2 text-xs text-muted-foreground">({issue.user.phone_number})</span>
+            )}
           </span>
         </div>
         <div className="flex items-center gap-2 text-sm">

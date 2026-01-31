@@ -52,7 +52,11 @@ transporter.verify((error, success) => {
 });
 
 // Middleware
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:5174', process.env.VITE_FRONTEND_URL],
+  credentials: true
+}));
 app.use(express.json());
 
 // Health check
@@ -837,6 +841,375 @@ cron.schedule('*/10 * * * *', async () => {
 
   } catch (err) {
     console.error('❌ Escalation Job Failed:', err);
+  }
+});
+
+// ============================================
+// ADMIN WORKFLOW ENDPOINTS (NEW)
+// ============================================
+
+// 4. Get Nearby Supervisors
+app.get('/api/supervisors/nearby', async (req, res) => {
+  const { lat, lon, department, district } = req.query;
+
+  if (!lat || !lon) {
+    return res.status(400).json({ error: 'Latitude and Longitude are required' });
+  }
+
+  try {
+    // Basic implementation: Filter by district/dept first, then sort by distance in memory 
+    // Query 'admins' table who are not super_admins (treating them as supervisors)
+    let query = supabase.from('admins')
+      .select('id, full_name, role, department, district, current_lat, current_lon, is_available')
+      .neq('role', 'super_admin');
+
+    if (department) query = query.eq('department', department);
+    if (district) query = query.eq('district', district);
+
+    const { data: supervisors, error } = await query;
+
+    if (error) throw error;
+
+    // Haversine Distance Calculation
+    const getDistance = (lat1, lon1, lat2, lon2) => {
+      if (!lat1 || !lon1 || !lat2 || !lon2) return 99999; // Handle missing coords
+      const R = 6371; // Radius of the earth in km
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c; // Distance in km
+    };
+
+    const sortedSupervisors = supervisors.map(s => ({
+      ...s,
+      name: s.full_name, // Map full_name to name for frontend compatibility
+      distance: getDistance(parseFloat(lat), parseFloat(lon), s.current_lat, s.current_lon)
+    })).sort((a, b) => a.distance - b.distance);
+
+    res.json(sortedSupervisors);
+  } catch (err) {
+    console.error('Error fetching supervisors:', err);
+    res.status(500).json({ error: 'Failed to fetch supervisors' });
+  }
+});
+
+// 5. Assign Supervisor
+app.post('/api/reports/assign', async (req, res) => {
+  const { reportId, supervisorId, adminId, adminName } = req.body;
+
+  try {
+    // 1. Update Report
+    const { error: updateError } = await supabase
+      .from('reports')
+      .update({
+        assigned_to: supervisorId,
+        status: 'in-progress',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reportId);
+
+    if (updateError) throw updateError;
+
+    // 2. Log Audit
+    await supabase.from('audit_logs').insert({
+      report_id: reportId,
+      admin_id: adminId,
+      admin_name: adminName,
+      action: 'ASSIGNMENT',
+      details: { supervisor_id: supervisorId }
+    });
+
+    res.json({ success: true, message: 'Supervisor assigned successfully' });
+  } catch (err) {
+    console.error('Assignment error:', err);
+    res.status(500).json({ error: 'Failed to assign supervisor' });
+  }
+});
+
+// 6. Work Completion (Supervisor uploads proof)
+app.post('/api/reports/complete', async (req, res) => {
+  const { reportId, image, notes } = req.body;
+
+  try {
+    const { error } = await supabase
+      .from('reports')
+      .update({
+        completion_image: image,
+        supervisor_notes: notes,
+        status: 'resolved',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reportId);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Work marked as complete' });
+  } catch (err) {
+    console.error('Completion error:', err);
+    res.status(500).json({ error: 'Failed to submit completion proof' });
+  }
+});
+
+// 7. Issue Closure (Admin Finalizes)
+app.post('/api/reports/close', async (req, res) => {
+  const { reportId, adminId, adminName } = req.body;
+
+  try {
+    const { error } = await supabase
+      .from('reports')
+      .update({
+        status: 'resolved',
+        state: 'closed', // Final state
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reportId);
+
+    if (error) throw error;
+
+    await supabase.from('audit_logs').insert({
+      report_id: reportId,
+      admin_id: adminId,
+      admin_name: adminName,
+      action: 'CLOSE',
+      details: 'Report officially closed by admin'
+    });
+
+    res.json({ success: true, message: 'Report closed successfully' });
+  } catch (err) {
+    console.error('Closure error:', err);
+    res.status(500).json({ error: 'Failed to close report' });
+  }
+});
+
+// 8. Submit Feedback
+app.post('/api/reports/feedback', async (req, res) => {
+  const { reportId, rating, comment } = req.body;
+
+  try {
+    const { error } = await supabase.from('feedbacks').insert({
+      report_id: reportId,
+      rating,
+      comment
+    });
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Feedback submitted' });
+  } catch (err) {
+    console.error('Feedback error:', err);
+    res.status(500).json({ error: 'Failed to submit feedback' });
+  }
+});
+
+// 9. Reopen Request
+app.post('/api/reports/reopen', async (req, res) => {
+  const { reportId, reason } = req.body;
+
+  try {
+    const { error } = await supabase
+      .from('reports')
+      .update({
+        reopen_requested: true,
+        reopen_reason: reason
+      })
+      .eq('id', reportId);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Reopen request submitted' });
+  } catch (err) {
+    console.error('Reopen error:', err);
+    res.status(500).json({ error: 'Failed to request reopen' });
+  }
+});
+
+// ============================================
+// INTELLIGENT SUPERVISOR ASSIGNMENT (NEW)
+// ============================================
+
+// 10. Get Eligible Supervisors with Weighted Scoring
+app.get('/api/admin/eligible-supervisors', async (req, res) => {
+  const { issue_id } = req.query;
+
+  if (!issue_id) {
+    return res.status(400).json({ error: 'issue_id is required' });
+  }
+
+  try {
+    // 1. Fetch Issue Details
+    const { data: issue, error: issueError } = await supabase
+      .from('reports')
+      .select('id, category, department, district, latitude, longitude')
+      .eq('id', issue_id)
+      .single();
+
+    if (issueError || !issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    // 2. Fetch Eligible Supervisors (same department + district + available)
+    const { data: supervisors, error: supError } = await supabase
+      .from('supervisors')
+      .select('id, name, email, phone, department, district, current_lat, current_lon, is_available, active_tasks, sla_delay_count')
+      .eq('department', issue.department)
+      .eq('district', issue.district)
+      .eq('is_available', true);
+
+    if (supError) throw supError;
+
+    if (!supervisors || supervisors.length === 0) {
+      return res.json({ supervisors: [], message: 'No eligible supervisors found' });
+    }
+
+    // 3. Haversine Distance Calculation
+    const getDistance = (lat1, lon1, lat2, lon2) => {
+      if (!lat1 || !lon1 || !lat2 || !lon2) return 99999;
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round((R * c) * 100) / 100; // km rounded to 2 decimals
+    };
+
+    // 4. Calculate Scores
+    const issueLat = issue.latitude;
+    const issueLon = issue.longitude;
+
+    const scored = supervisors.map(s => {
+      const distance = getDistance(issueLat, issueLon, s.current_lat, s.current_lon);
+      const score = (distance * 0.5) + ((s.active_tasks || 0) * 0.3) + ((s.sla_delay_count || 0) * 0.2);
+      return { ...s, distance, score };
+    });
+
+    // 5. Sort by Score (lowest = best)
+    scored.sort((a, b) => a.score - b.score);
+
+    // 6. Find Best Tags
+    const minDistance = Math.min(...scored.map(s => s.distance));
+    const minWorkload = Math.min(...scored.map(s => s.active_tasks || 0));
+
+    // 7. Return Top 3 with Tags
+    const top3 = scored.slice(0, 3).map((s, index) => ({
+      ...s,
+      isRecommended: index === 0,
+      isNearest: s.distance === minDistance,
+      isLeastWorkload: (s.active_tasks || 0) === minWorkload
+    }));
+
+    res.json({ supervisors: top3, issue: { department: issue.department, district: issue.district } });
+  } catch (err) {
+    console.error('Error fetching eligible supervisors:', err);
+    res.status(500).json({ error: 'Failed to fetch eligible supervisors' });
+  }
+});
+
+// 11. Assign Supervisor (Enhanced with Override Reason)
+app.post('/api/admin/assign-supervisor', async (req, res) => {
+  const { issue_id, supervisor_id, override_reason, admin_id, admin_name } = req.body;
+
+  if (!issue_id || !supervisor_id) {
+    return res.status(400).json({ error: 'issue_id and supervisor_id are required' });
+  }
+
+  try {
+    // 1. Fetch Issue for Validation
+    const { data: issue, error: issueError } = await supabase
+      .from('reports')
+      .select('id, department, district, latitude, longitude, assigned_to')
+      .eq('id', issue_id)
+      .single();
+
+    if (issueError || !issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    if (issue.assigned_to) {
+      return res.status(400).json({ error: 'Issue already assigned. Use reassign instead.' });
+    }
+
+    // 2. Fetch Supervisor for Validation
+    const { data: supervisor, error: supError } = await supabase
+      .from('supervisors')
+      .select('id, name, department, district, current_lat, current_lon, active_tasks')
+      .eq('id', supervisor_id)
+      .single();
+
+    if (supError || !supervisor) {
+      return res.status(404).json({ error: 'Supervisor not found' });
+    }
+
+    // 3. Validate Department & District Match
+    if (supervisor.department !== issue.department || supervisor.district !== issue.district) {
+      return res.status(400).json({ error: 'Supervisor department/district does not match issue.' });
+    }
+
+    // 4. Calculate Distance for Audit
+    const getDistance = (lat1, lon1, lat2, lon2) => {
+      if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+      const R = 6371;
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round((R * c) * 100) / 100;
+    };
+    const distanceAtAssignment = getDistance(issue.latitude, issue.longitude, supervisor.current_lat, supervisor.current_lon);
+
+    // 5. Update Issue
+    const { error: updateError } = await supabase
+      .from('reports')
+      .update({
+        assigned_to: supervisor_id,
+        status: 'in-progress',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', issue_id);
+
+    if (updateError) throw updateError;
+
+    // 6. Increment Supervisor Workload
+    await supabase
+      .from('supervisors')
+      .update({ active_tasks: (supervisor.active_tasks || 0) + 1 })
+      .eq('id', supervisor_id);
+
+    // 7. Audit Log
+    await supabase.from('audit_logs').insert({
+      report_id: issue_id,
+      admin_id: admin_id || 'ADMIN',
+      admin_name: admin_name || 'Admin',
+      action: 'SUPERVISOR_ASSIGNED',
+      details: { supervisor_id, supervisor_name: supervisor.name },
+      override_reason: override_reason || null,
+      distance_at_assignment: distanceAtAssignment
+    });
+
+    // 8. Create Notification for Supervisor
+    await supabase.from('notifications').insert({
+      recipient_type: 'supervisor',
+      recipient_clerk_id: supervisor_id,
+      report_id: issue_id,
+      type: 'task_assigned',
+      title: 'New Task Assigned',
+      body: `You have been assigned a new civic issue.`,
+      status: 'pending'
+    });
+
+    res.json({ success: true, message: `Supervisor ${supervisor.name} assigned successfully`, supervisor_name: supervisor.name });
+  } catch (err) {
+    console.error('Assignment error:', err);
+    res.status(500).json({ error: 'Failed to assign supervisor' });
   }
 });
 

@@ -56,7 +56,7 @@ export default function Admins() {
 
   const filteredAdmins = admins.filter(
     (admin) =>
-      (admin.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (admin.full_name || admin.name || "").toLowerCase().includes(search.toLowerCase()) ||
       (admin.email || "").toLowerCase().includes(search.toLowerCase())
   );
 
@@ -96,13 +96,15 @@ export default function Admins() {
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-lg">
-                  {(admin.name || "U")
+                  {(admin.full_name || admin.name || "Admin")
                     .split(" ")
                     .map((n) => n[0])
                     .join("")}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">{admin.name}</h3>
+                  <h3 className="font-semibold text-foreground">
+                    {admin.full_name || admin.name}
+                  </h3>
                   <p className="text-sm text-muted-foreground">{admin.email}</p>
                 </div>
               </div>

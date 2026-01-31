@@ -15,16 +15,24 @@ export const supabase = createClient(
 // Database Types
 export interface Issue {
   id: string;
+  // Hardened ID fields
+  issue_id?: string; // Optional if same as id
+  department_id?: string;
+  district_id?: string;
+  admin_id?: string;
+  supervisor_id?: string;
+
   title: string;
   description: string;
   category: string;
-  status: 'open' | 'in-progress' | 'resolved' | 'rejected';
+  status: 'SUBMITTED' | 'ASSIGNED_TO_SUPERVISOR' | 'IN_PROGRESS' | 'WORK_COMPLETED' | 'ADMIN_VERIFIED' | 'REJECTED' | 'ESCALATED' | 'open' | 'in-progress' | 'resolved' | 'rejected'; // Keeping strict + legacy for compatibility during migration
   priority: 'low' | 'medium' | 'high';
   location: string;
   latitude?: number;
   longitude?: number;
   district: string;
   state: string;
+  department?: string;
   image_url?: string;
   reported_by: string;
   reporter_name?: string;
@@ -38,10 +46,16 @@ export interface Issue {
 
 export interface Admin {
   id: string;
+  // Hardened ID fields
+  department_id?: string;
+  district_id?: string;
+  is_active?: boolean;
+
   clerk_id: string;
   email: string;
   name: string;
-  role: 'state' | 'district' | 'local' | 'super_admin';
+  full_name?: string;
+  role: 'state' | 'district' | 'local' | 'super_admin' | 'department';
   state?: string;
   district?: string;
   local_body?: string;

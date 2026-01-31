@@ -7,9 +7,10 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { getOfficers, assignOfficerToReport, Officer } from "@/services/officerService";
+import { getOfficers, assignOfficerToReport, Officer, getNearbySupervisors, getEligibleSupervisors, assignSupervisorToIssue, EligibleSupervisor } from "@/services/officerService";
 import { assignReportViaWhatsApp } from "@/services/whatsappService";
 import { assignReportViaEmail } from "@/services/emailService";
+import { Users, Star, Zap } from "lucide-react";
 
 export default function ReportDetailsPage() {
     const { id } = useParams();
@@ -27,6 +28,14 @@ export default function ReportDetailsPage() {
     const [showAssignDialog, setShowAssignDialog] = useState(false);
     const [selectedOfficer, setSelectedOfficer] = useState<Officer | null>(null);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+    const [reporterInfo, setReporterInfo] = useState<{ full_name: string; phone_number?: string } | null>(null);
+
+    // Intelligent Supervisor Assignment
+    const [eligibleSupervisors, setEligibleSupervisors] = useState<EligibleSupervisor[]>([]);
+    const [loadingSupervisors, setLoadingSupervisors] = useState(false);
+    const [showOverrideModal, setShowOverrideModal] = useState(false);
+    const [overrideReason, setOverrideReason] = useState("");
+    const [pendingAssignment, setPendingAssignment] = useState<EligibleSupervisor | null>(null);
 
     const fetchReport = async () => {
         if (!id) return;
@@ -40,6 +49,11 @@ export default function ReportDetailsPage() {
                 // Fetch audit logs
                 const logs = await reportService.getAuditLogs(id);
                 setAuditLogs(logs);
+                // Fetch reporter user details
+                if (data.user_id) {
+                    const userInfo = await reportService.getUserById(data.user_id);
+                    setReporterInfo(userInfo);
+                }
             } else {
                 toast.error("Report not found");
                 navigate("/admin/issues");
@@ -163,8 +177,75 @@ export default function ReportDetailsPage() {
     };
 
     const loadOfficers = async () => {
-        const officersList = await getOfficers();
+        if (!report) return;
+
+        let officersList: Officer[] = [];
+
+        if (report.latitude && report.longitude) {
+            // Smart Assignment: Sort by distance
+            officersList = await getNearbySupervisors(
+                report.latitude,
+                report.longitude,
+                report.category,
+                report.district
+            );
+        } else {
+            // Fallback: List all officers
+            officersList = await getOfficers();
+        }
         setOfficers(officersList);
+    };
+
+    // Intelligent Supervisor Loading
+    const loadEligibleSupervisors = async () => {
+        if (!report?.id) return;
+        setLoadingSupervisors(true);
+        try {
+            const { supervisors } = await getEligibleSupervisors(report.id);
+            setEligibleSupervisors(supervisors);
+        } catch (err) {
+            console.error('Error loading eligible supervisors:', err);
+            toast.error('Failed to load supervisors');
+        } finally {
+            setLoadingSupervisors(false);
+        }
+    };
+
+    // Handle Intelligent Assignment
+    const handleSmartAssignment = async (supervisor: EligibleSupervisor, isOverride: boolean = false) => {
+        if (!report?.id || !adminEmail) return;
+
+        // If non-recommended and no override modal shown yet, show it
+        if (!supervisor.isRecommended && !isOverride) {
+            setPendingAssignment(supervisor);
+            setShowOverrideModal(true);
+            return;
+        }
+
+        setUpdating(true);
+        try {
+            const result = await assignSupervisorToIssue(
+                report.id,
+                supervisor.id,
+                adminEmail,
+                'Admin',
+                isOverride ? overrideReason : undefined
+            );
+
+            if (result.success) {
+                toast.success(`✅ ${result.supervisor_name} assigned!`);
+                fetchReport(); // Refresh
+                setShowOverrideModal(false);
+                setOverrideReason("");
+                setPendingAssignment(null);
+            } else {
+                toast.error(result.message);
+            }
+        } catch (err) {
+            toast.error('Assignment failed');
+        } finally {
+            setUpdating(false);
+        }
     };
 
     const handleAssignOfficer = async () => {
@@ -426,7 +507,14 @@ export default function ReportDetailsPage() {
                                 <User className="h-4 w-4 text-muted-foreground" />
                                 <div>
                                     <p className="text-xs text-muted-foreground">Reporter</p>
-                                    <p className="font-medium text-foreground">{report.user_id}</p>
+                                    <p className="font-medium text-foreground">
+                                        {reporterInfo?.full_name || 'Unknown'}
+                                    </p>
+                                    {reporterInfo?.phone_number && (
+                                        <p className="text-xs text-muted-foreground">
+                                            📞 {reporterInfo.phone_number}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -516,9 +604,129 @@ export default function ReportDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Officer Assignment */}
+                    {/* Intelligent Supervisor Assignment */}
                     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-                        <h3 className="font-semibold text-foreground mb-4">Assign to Officer</h3>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <Users className="h-5 w-5 text-primary" />
+                                Assign Supervisor
+                            </h3>
+                            {!report.assigned_to && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={loadEligibleSupervisors}
+                                    disabled={loadingSupervisors}
+                                >
+                                    {loadingSupervisors ? <Loader2 className="h-4 w-4 animate-spin" /> : '🔄 Find'}
+                                </Button>
+                            )}
+                        </div>
+
+                        {report.assigned_to ? (
+                            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
+                                <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                                <p className="text-green-700 dark:text-green-300 font-medium">Supervisor Assigned</p>
+                            </div>
+                        ) : eligibleSupervisors.length === 0 ? (
+                            <div className="text-center py-4">
+                                <p className="text-muted-foreground text-sm">Click "Find" to get AI-recommended supervisors</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {eligibleSupervisors.map((sup, idx) => (
+                                    <div
+                                        key={sup.id}
+                                        className={`p-3 rounded-lg border-2 transition-all ${sup.isRecommended
+                                                ? 'border-primary bg-primary/5'
+                                                : 'border-border hover:border-primary/50'
+                                            }`}
+                                    >
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <p className="font-semibold text-foreground flex items-center gap-2">
+                                                    {sup.isRecommended && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />}
+                                                    {sup.name}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">{sup.email}</p>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant={sup.isRecommended ? "default" : "outline"}
+                                                onClick={() => handleSmartAssignment(sup)}
+                                                disabled={updating}
+                                            >
+                                                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Assign'}
+                                            </Button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 text-xs">
+                                            <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                                📍 {sup.distance} km
+                                            </span>
+                                            <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                                📋 {sup.active_tasks} tasks
+                                            </span>
+                                            {sup.isNearest && (
+                                                <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 flex items-center gap-1">
+                                                    <Zap className="h-3 w-3" /> Nearest
+                                                </span>
+                                            )}
+                                            {sup.isLeastWorkload && (
+                                                <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                                                    ⚡ Least Workload
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Override Reason Modal */}
+                    {showOverrideModal && pendingAssignment && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                            <div className="bg-card rounded-xl p-6 w-full max-w-md shadow-2xl border border-border">
+                                <h3 className="text-lg font-bold mb-4">Override Assignment</h3>
+                                <p className="text-muted-foreground text-sm mb-4">
+                                    You selected <strong>{pendingAssignment.name}</strong> instead of the recommended supervisor.
+                                    Please provide a reason for this override.
+                                </p>
+                                <textarea
+                                    className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-sm resize-none"
+                                    rows={3}
+                                    placeholder="Enter override reason (required)..."
+                                    value={overrideReason}
+                                    onChange={(e) => setOverrideReason(e.target.value)}
+                                />
+                                <div className="flex gap-3 mt-4">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => {
+                                            setShowOverrideModal(false);
+                                            setPendingAssignment(null);
+                                            setOverrideReason("");
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        className="flex-1"
+                                        disabled={!overrideReason.trim() || updating}
+                                        onClick={() => handleSmartAssignment(pendingAssignment, true)}
+                                    >
+                                        {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                        Confirm Assignment
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Legacy Officer Assignment (WhatsApp/Email) */}
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h3 className="font-semibold text-foreground mb-4">📧 Notify via External</h3>
                         <div className="space-y-2">
                             <Button
                                 onClick={() => {
@@ -709,9 +917,18 @@ export default function ReportDetailsPage() {
                                             >
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="flex-1">
-                                                        <h3 className="font-semibold text-foreground">
-                                                            {officer.name}
-                                                        </h3>
+                                                        <div className="flex justify-between items-start">
+                                                            <h3 className="font-semibold text-foreground">
+                                                                {officer.name}
+                                                            </h3>
+                                                            {officer.distance !== undefined && (
+                                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${officer.distance < 5 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                                    {officer.distance < 1
+                                                                        ? `${(officer.distance * 1000).toFixed(0)}m away`
+                                                                        : `${officer.distance.toFixed(1)}km away`}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <p className="text-sm text-muted-foreground mt-1">
                                                             {officer.email}
                                                         </p>

@@ -161,7 +161,11 @@ export function IssuesTable({
     const matchesCategory = localCategoryFilter === "all" || issue.category === localCategoryFilter;
 
     // Soft Department Filter
-    const matchesDepartment = showAllDepartments || !adminDepartment || issue.category === adminDepartment;
+    // We check issue.department first (populated by SQL trigger).
+    // Fallback to category for older records if department is missing.
+    const matchesDepartment = showAllDepartments || !adminDepartment ||
+      (issue.department === adminDepartment) ||
+      (issue.category === adminDepartment);
 
     return matchesSearch && matchesStatus && matchesCategory && matchesDepartment;
   });

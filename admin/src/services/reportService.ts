@@ -26,6 +26,13 @@ export interface Report {
     escalated_at?: string;
     district?: string;
     state?: string;
+    department?: string;
+    assigned_to?: string; // Supervisor ID
+    // Joined User fields
+    user?: {
+        full_name: string;
+        phone_number?: string;
+    };
 }
 
 export interface AuditLog {
@@ -66,7 +73,7 @@ export const reportService = {
     async getReports(filters?: ReportFilters): Promise<Report[]> {
         let query = supabase
             .from('reports')
-            .select('id, title, category, status, severity, location_name, user_id, upvotes, created_at, updated_at, deadline, escalated, escalated_at, district, state')
+            .select('id, title, category, status, severity, location_name, user_id, upvotes, created_at, updated_at, deadline, escalated, escalated_at, district, state, department')
             .order('created_at', { ascending: false })
             .range(0, 49); // Limit to 50 most recent for performance
 
@@ -125,58 +132,46 @@ export const reportService = {
 
     // Resolve report function removed (reverted to client-side logic in component)
 
-    // Update report status (Client-side resolution with Base64 support)
+    // Update report status (Uses new Admin Workflow API)
     async updateReportStatus(id: string, status: Report['status'], adminEmail?: string, resolvedImageUrl?: string): Promise<{ success: boolean; error?: any }> {
-        const updateData: any = {
-            status,
-            updated_at: new Date().toISOString(),
-        };
+        try {
+            let endpoint = '';
+            let body: any = { reportId: id };
 
-        if (status === 'resolved') {
-            updateData.resolved_at = new Date().toISOString();
-            if (adminEmail) {
-                updateData.resolved_by = adminEmail;
+            if (status === 'resolved') {
+                if (resolvedImageUrl) {
+                    // Scenario 1: Supervisor marking complete (with proof)
+                    endpoint = '/api/reports/complete';
+                    body = { reportId: id, image: resolvedImageUrl, notes: 'Resolved by admin' };
+                } else {
+                    // Scenario 2: Admin officially closing
+                    endpoint = '/api/reports/close';
+                    body = { reportId: id, adminId: adminEmail, adminName: adminEmail }; // Using email as ID for now
+                }
+            } else {
+                // Scenario 3: Generic status update (e.g. rejected) - fallback to direct DB update or another endpoint
+                // ideally we'd have an endpoint, but for now we can fallback to Supabase for non-workflow statuses
+                const { error } = await supabase.from('reports').update({ status }).eq('id', id);
+                if (error) throw error;
+                return { success: true };
             }
-            if (resolvedImageUrl) {
-                updateData.resolved_image_url = resolvedImageUrl;
+
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'API request failed');
             }
-        }
 
-        const { error } = await supabase
-            .from('reports')
-            .update(updateData)
-            .eq('id', id);
-
-        if (error) {
+            return { success: true };
+        } catch (error: any) {
             console.error('Error updating report status:', error);
             return { success: false, error: error };
         }
-
-        // Automatically notify user when admin resolves/rejects their report
-        try {
-            // Get report owner's user_id and title
-            const { data: report } = await supabase
-                .from('reports')
-                .select('user_id, title')
-                .eq('id', id)
-                .single();
-
-            if (report?.user_id) {
-                await supabase.from('notifications').insert({
-                    recipient_type: 'user',
-                    recipient_clerk_id: report.user_id,
-                    report_id: id,
-                    type: 'issue_resolved',
-                    title: status === 'resolved' ? 'Issue Resolved' : 'Issue Rejected',
-                    body: status === 'resolved' ? 'Your report has been resolved' : 'Your report was rejected',
-                    status: 'pending'
-                });
-            }
-        } catch (notifError) {
-            console.log('Admin resolved notification failed (non-critical)', notifError);
-        }
-
-        return { success: true };
     },
 
     // Mark report as viewed by admin
@@ -328,7 +323,18 @@ export const reportService = {
     async getRecentReports(limit: number = 10): Promise<Report[]> {
         const { data, error } = await supabase
             .from('reports')
-            .select('id, title, category, status, severity, created_at, deadline')
+            .select(`
+                id, 
+                title, 
+                category, 
+                status, 
+                severity, 
+                created_at, 
+                deadline, 
+                location_name,
+                department,
+                user_id
+            `)
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -369,5 +375,32 @@ export const reportService = {
         }
 
         return data || [];
+    },
+
+    // Get User details by ID (for Report Detail View)
+    // Handles both UUID (from auth.users) and Clerk ID formats
+    async getUserById(userId: string): Promise<{ full_name: string; phone_number?: string } | null> {
+        if (!userId) return null;
+
+        // Check if userId is a UUID format (contains hyphens and is 36 chars)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+
+        let query = supabase.from('users').select('full_name, phone_number');
+
+        if (isUUID) {
+            query = query.eq('id', userId);
+        } else {
+            // It's a Clerk ID (e.g., "user_xxx"), look up by clerk_id
+            query = query.eq('clerk_id', userId);
+        }
+
+        const { data, error } = await query.single();
+
+        if (error) {
+            console.error('Error fetching user details:', error);
+            return null;
+        }
+
+        return data;
     },
 };
